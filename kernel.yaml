@@ -1,7 +1,7 @@
 ---
 name: _kernel_TCP
 protocol: TCP
-libpath: /home/mduke/taps/lib/libtaps_tcp.so
+libpath: /usr/lib/libtaps_tcp.so
 properties:
   - reliability
   - preserveOrder
@@ -15,7 +15,7 @@ properties:
 ---
 name: _kernel_UDP
 protocol: UDP
-libpath: taps_udp.so
+libpath: /usr/lib/libtaps_udp.so
 properties:
   - preserveMsgBoundaries
   - zeroRttMsg

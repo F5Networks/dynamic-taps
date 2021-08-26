@@ -18,7 +18,9 @@ provided they meet user-specified trust criteria.
 ## Getting Started
 
 git clone https://github.com/f5networks/dynamic-taps.git
-cd taps
+cd dynamic-taps
+make
+sudo make install
 make examples
 ./echoapp
 
