@@ -20,7 +20,7 @@ TEST_OBJECTS := $(TEST_SOURCES:%.c=%.o)
 test/%.o: test/%.c
 	gcc -c $< -o $@ -lyaml -I test/
 
-examples: /usr/lib/libtaps.so /usr/lib/libtaps_tcp.so
+examples: lib/libtaps.so lib/libtaps_tcp.so
 	gcc -o echoapp examples/echoapp.c -L ./lib -ltaps -ltaps_tcp -lyaml -ldl
 	chmod 755 echoapp
 
