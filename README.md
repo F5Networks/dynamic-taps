@@ -34,6 +34,9 @@ You can also do 'make test' to run the unit tests.
 There will later be a 'make install' to install the libraries and taps config in
 the proper place.
 
+Note: if your dynamic libraries are not in /usr/lib, you will have to modify
+kernel.yaml and the Makefile accordingly.
+
 ## Architecture
 
 Coming soon.
