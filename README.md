@@ -1,0 +1,42 @@
+# taps
+An implementation of TAPS in C with protocol discovery.
+
+The Transport Services API (TAPS) Working Group is standardizing an API that
+transport-layer protocols (broadly defined to include substrates above Layer 4,
+such as TLS, HTTP, and Websockets) present to applications. Applications request
+a transport with certain properties, and TAPS would select the protocol that best
+met those requirements. This would free applications from having to change when
+new protocols emerge. As the interface is asynchronous, it also simplifies
+adapting protocols to various hardware offloads. One objective of this project is
+a Linux C implementation of the latest version of the standard.
+
+However, as of 2020 all known applications could only select protocols native to
+the operating system. Another aim of this project is to implement "Transport
+Discovery" -- a means for TAPS to identify the protocol implementations available
+provided they meet user-specified trust criteria.
+
+## Getting Started
+
+git clone https://github.com/f5networks/dynamic-taps.git
+cd taps
+make examples
+./echoapp
+
+This code launches a server on localhost on port 5555. You can telnet to it, and
+the server will echo back whatever you type.
+
+You can also do 'make test' to run the unit tests.
+
+There will later be a 'make install' to install the libraries and taps config in
+the proper place.
+
+## Architecture
+
+Coming soon.
+
+## References
+The interface between applications and TAPS is specified in documents available
+on the [TAPS WG github](https://github.com/ietf-tapswg/api-drafts).
+
+The interface between TAPS and arbitrary protocol implementations is defined in
+an [individual draft](https://github.com/martinduke/draft-duke-taps-transport-discovery).

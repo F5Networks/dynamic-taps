@@ -1,0 +1,24 @@
+---
+name: _kernel_TCP
+protocol: TCP
+libpath: /home/mduke/taps/lib/libtaps_tcp.so
+properties:
+  - reliability
+  - preserveOrder
+  - zeroRttMsg
+  - FullChecksumSend
+  - FullChecksumRecv
+  - activeReadBeforeSend
+  - congestionControl
+  - keepAlive
+  - activeReadBeforeSend
+---
+name: _kernel_UDP
+protocol: UDP
+libpath: taps_udp.so
+properties:
+  - preserveMsgBoundaries
+  - zeroRttMsg
+  - FullChecksumSend
+  - FullChecksumRecv
+  - activeReadBeforeSend
