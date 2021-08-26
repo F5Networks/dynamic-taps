@@ -1,10 +1,12 @@
 SOURCES := $(wildcard src/*.c)
 OBJECTS := $(SOURCES:src/%.c=bin/%.o)
 
-lib/taps.so: $(OBJECTS)
+all: lib/libtaps.so lib/libtaps_tcp.so
+
+lib/libtaps.so: $(OBJECTS)
 	gcc -shared -o lib/libtaps.so $(OBJECTS)
 
-lib/libtaps_tcp.so: src/tcp/tcp.c $(OBJECTS)
+lib/libtaps_tcp.so: src/tcp/tcp.c
 	gcc -o lib/tcp.o -c src/tcp/tcp.c -levent
 	gcc -shared -o lib/libtaps_tcp.so lib/tcp.o -levent
 	rm -f lib/tcp.o
@@ -18,7 +20,7 @@ TEST_OBJECTS := $(TEST_SOURCES:%.c=%.o)
 test/%.o: test/%.c
 	gcc -c $< -o $@ -lyaml -I test/
 
-examples: lib/taps.so lib/libtaps_tcp.so
+examples: lib/libtaps.so lib/libtaps_tcp.so
 	gcc -o echoapp examples/echoapp.c -L ./lib -ltaps -ltaps_tcp -lyaml -ldl
 	chmod 755 echoapp
 
@@ -27,4 +29,4 @@ test: $(TEST_OBJECTS) $(OBJECTS)
 	./test/t
 
 clean:
-	rm -f *.o *.a test/t test/*.o bin/*.o lib/*.so
+	rm -f *.o *.a test/t test/*.o bin/*.o lib/*.so echoapp
