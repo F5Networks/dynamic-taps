@@ -138,6 +138,7 @@ tapsPreconnectionNew(TAPS_CTX **localEndpoint, int numLocal,
     int                  numProtocols, i;
 
     /* Check for easy problems */
+    TAPS_TRACE();
     if ((numLocal > TAPS_MAX_ENDPOINTS) || (numRemote > TAPS_MAX_ENDPOINTS)) {
         errno = E2BIG;
         return NULL;
@@ -219,6 +220,7 @@ tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
     LIST_HEAD(, struct _node) endpoints;
     struct _node      *node, *__node;
 
+    TAPS_TRACE();
     if (pc->numRemote < 1) {
         errno = EINVAL;
         goto fail;
@@ -293,6 +295,7 @@ newConn(void *taps_ctx, void *proto_ctx)
     tapsListener   *listener = taps_ctx;
     tapsConnection *conn = malloc(sizeof(tapsConnection));
 
+    TAPS_TRACE();
     if (conn == NULL) {
         /* XXX Stop the listener */
         return;
@@ -318,6 +321,7 @@ tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
     struct sockaddr_in  sin;
     struct sockaddr_in6 sin6;
 
+    TAPS_TRACE();
     if (pc->numLocal < 1) {
         errno = EINVAL;
         printf("No local endpoints\n");
@@ -402,6 +406,7 @@ listenStop(void *taps_ctx)
 {
     tapsListener *ctx = taps_ctx;
 
+    TAPS_TRACE();
     if (!ctx->stopped) {
         return; /* Can't stop twice! */
     }
@@ -416,6 +421,7 @@ tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped)
 {
     tapsListener     *ctx = (tapsListener *)listener;
 
+    TAPS_TRACE();
     ctx->stopped = stopped;
     (ctx->stopHandle)(ctx->protoHandle, &listenStop);
     return;
@@ -426,6 +432,7 @@ tapsListenerFree(TAPS_CTX *listener)
 {
     tapsListener     *ctx = (tapsListener *)listener;
 
+    TAPS_TRACE();
     if (!ctx->stopped) {
         return -1;
     }
@@ -441,6 +448,7 @@ tapsPreconnectionFree(TAPS_CTX *pc)
 {
     tapsPreconnection *preconn = (tapsPreconnection *)pc;
 
+    TAPS_TRACE();
     if (preconn) {
         while (preconn->numProtocols) {
             free(preconn->protocol[preconn->numProtocols - 1].name); 

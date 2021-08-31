@@ -94,6 +94,7 @@ newConn(evutil_socket_t listener, short event, void *arg)
     socklen_t                slen = sizeof(ss);
     struct conn_ctx         *cctx;
 
+    TAPS_TRACE();
     cctx = malloc(sizeof(struct conn_ctx));
     if (!cctx) goto fail;
     cctx->fd = accept(listener, (struct sockaddr *)&ss, &slen);
@@ -117,6 +118,7 @@ Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
     size_t               addr_size = (local->sa_family == AF_INET) ?
             sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
 
+    TAPS_TRACE();
     listener = malloc(sizeof(struct listener_ctx));
     if (!listener) return NULL;
     listener->base = base;
@@ -166,6 +168,7 @@ ListenStop(void *proto_ctx, StoppedCb cb)
     struct listener_ctx *ctx = proto_ctx;
     void  *taps_ctx = ctx->taps_ctx;
 
+    TAPS_TRACE();
     event_del(ctx->event);
     event_free(ctx->event);
     ctx->event = NULL;

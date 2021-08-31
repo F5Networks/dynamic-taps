@@ -41,6 +41,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define TAPS_DEBUG
+
+#ifdef TAPS_DEBUG
+#define TAPS_TRACE() printf("Function %s: %s\n", __FILE__, __FUNCTION__);
+#else
+#define TAPS_TRACE()
+#endif
+
 typedef void TAPS_CTX;
 
 /* Function pointers for callbacks */
