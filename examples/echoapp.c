@@ -37,25 +37,25 @@ static struct event_base *base;
 void
 sendRecvError(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    printf("send or receive failed\n");
+    TAPS_TRACE();
 }
 
 void
 sendExpired(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    printf("send expired\n");
+    TAPS_TRACE();
 }
 
 void
 connSent(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    printf("response sent\n");
+    TAPS_TRACE();
 }
 
 void
 connRcv(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    printf("echoing %lu bytes\n", data_len);
+    TAPS_TRACE();
 //    tapsConnectionSend(ctx, data, data_len, NULL, FALSE, &connSent,
 //            &sendExpired, &sendRecvError);
     /* Get ready for more! */
@@ -65,7 +65,7 @@ connRcv(TAPS_CTX *ctx, void *data, size_t data_len)
 void
 connClose(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    printf("Client closed connection\n");
+    TAPS_TRACE();
 //    tapsConnectionFree(ctx);
 }
 
@@ -73,6 +73,7 @@ void
 listenerConnRcvd(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     //TAPS_CTX *conn = data;
+    TAPS_TRACE();
     /* Do the same thing for "partial" and full inputs */
 //    tapsConnectionReceive(conn, 0, 0, &connRcv, &connRcv, &sendRecvError);
     return;
@@ -81,7 +82,7 @@ listenerConnRcvd(TAPS_CTX *ctx, void *data, size_t data_len)
 void
 listenerError(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    printf("Listener returned error\n");
+    TAPS_TRACE();
     tapsListenerFree(ctx);
     if (tapsListenerFree(ctx) < 0) {
         printf("Listener free failed.\n");
@@ -91,7 +92,7 @@ listenerError(TAPS_CTX *ctx, void *data, size_t data_len)
 void
 listenerStopped(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    printf("Listener Stopped\n");
+    TAPS_TRACE();
     if (tapsListenerFree(ctx) < 0) {
         printf("Listener free failed.\n");
     }
@@ -102,6 +103,7 @@ static void sighandler(evutil_socket_t fd, short events, void *arg)
 {
     TAPS_CTX *listener = arg;
 
+    TAPS_TRACE();
     tapsListenerStop(listener, &listenerStopped);
     printf("killing server\n");
 }
