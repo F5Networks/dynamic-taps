@@ -164,12 +164,13 @@ int
 ListenStop(void *proto_ctx, StoppedCb cb)
 {
     struct listener_ctx *ctx = proto_ctx;
+    void  *taps_ctx = ctx->taps_ctx;
 
     event_del(ctx->event);
     event_free(ctx->event);
     ctx->event = NULL;
-    /* Thread should be dead */
-    (*cb)(ctx->taps_ctx);
     close(ctx->fd);
     free(proto_ctx);
+    /* Thread should be dead */
+    (*cb)(ctx->taps_ctx);
 }
