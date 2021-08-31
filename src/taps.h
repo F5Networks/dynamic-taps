@@ -247,13 +247,15 @@ void tapsGetProperty(int connection, char *propertyName, void *value);
 /* It would be good to allow the application to attach metadata, I think. */
 
 /* XXX TODO Messages and Framers (Sec 7.1) */
+#endif
 
 /* Sending (Sec 7.2) */
 void tapsConnectionSend(TAPS_CTX *connection, void *data, size_t data_len,
-        tapsMessageContext *ctx, bool eom,
         tapsCallback *sent, tapsCallback *expired, tapsCallback *error);
+#if 0
 void tapsStartBatch(int connection);
 void tapsEndBatch(int connection);
+#endif
 
 /* Receiving (Sec 7.3) */
 /*
@@ -264,6 +266,7 @@ void tapsConnectionReceive(TAPS_CTX *connection, size_t minIncompleteLength,
         size_t maxLength, tapsCallback *received, tapsCallback *receivedPartial,
         tapsCallback *error);
 
+#if 0
 /* Termination (Sec 8) */
 void tapsClose(int connection, tapsCallback *closed, tapsCallback *error);
 void tapsAbort(int connection, tapsCallback *error);

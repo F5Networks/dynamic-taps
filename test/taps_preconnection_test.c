@@ -25,6 +25,23 @@
 
 #define TEST_FN(name) if (name) { goto fail; }
 
+/* XXX Just copy this until we have query functions */
+typedef struct {
+    tapsEndpoint  *local[TAPS_MAX_ENDPOINTS];
+    int            numLocal;
+    tapsEndpoint  *remote[TAPS_MAX_ENDPOINTS];
+    int            numRemote;
+    /* XXX what would be the effect of the application messing with the
+       libpath here? Security problem? */
+    tapsProtocol   protocol[TAPS_MAX_PROTOCOL_CANDIDATES];
+    int            numProtocols;
+    transportProperties *transport;
+    void                *security;
+} tapsPreconnection;
+
+int tapsUpdateProtocols(tapsProtocol *next, int slotsRemaining);
+
+
 int preconnectionTest()
 {
     int result = 0;
