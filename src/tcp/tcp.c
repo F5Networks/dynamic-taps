@@ -87,7 +87,7 @@ struct listener_ctx {
 };
 
 static void
-newConn(evutil_socket_t listener, short event, void *arg)
+_proto_connection_received(evutil_socket_t listener, short event, void *arg)
 {
     struct listener_ctx     *lctx = arg;
     struct sockaddr_storage  ss;
@@ -146,7 +146,7 @@ Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
         goto fail;
     }
     listener->event = event_new(listener->base, listener->fd,
-            EV_READ | EV_PERSIST, newConn, (void *)listener);
+            EV_READ | EV_PERSIST, _proto_connection_received, (void *)listener);
     event_add(listener->event, NULL);
 
     return listener;
@@ -163,7 +163,7 @@ fail:
 }
 
 int
-ListenStop(void *proto_ctx, StoppedCb cb)
+Stop(void *proto_ctx, StoppedCb cb)
 {
     struct listener_ctx *ctx = proto_ctx;
     void  *taps_ctx = ctx->taps_ctx;

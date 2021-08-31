@@ -231,25 +231,12 @@ typedef struct {
 #define TAPS_MAX_ENDPOINTS 8
 #define TAPS_MAX_PROTOCOL_CANDIDATES 256
 
-typedef struct {
-    tapsEndpoint  *local[TAPS_MAX_ENDPOINTS];
-    int            numLocal;
-    tapsEndpoint  *remote[TAPS_MAX_ENDPOINTS];
-    int            numRemote;
-    /* XXX what would be the effect of the application messing with the
-       libpath here? Security problem? */
-    tapsProtocol   protocol[TAPS_MAX_PROTOCOL_CANDIDATES];
-    int            numProtocols;
-    transportProperties *transport;
-    void                *security;
-} tapsPreconnection;
-
 int tapsUpdateProtocols(tapsProtocol *next, int slotsRemaining);
 
 typedef struct {
     void             *protoHandle;
     listenHandle      listenHandle;
-    listenStopHandle  stopHandle;
+    stopHandle        stopHandle;
     void             *proto_ctx; /* Opaque blob for use by the protocol */
     tapsCallback      received;
     tapsCallback      error;
