@@ -35,6 +35,8 @@
 #define _TAPS_H
 
 #include <arpa/inet.h>
+#include <event2/event.h>
+#include <event2/util.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -207,8 +209,8 @@ int tapsInitiateWithSend(int preconnection, unsigned int timeoutSec,
  * the connection. */
 /* We need to include handlers for connection close and abort that will be
    installed in connections that are returned with received(). */
-TAPS_CTX *tapsPreconnectionListen(TAPS_CTX *preconn, tapsCallback received,
-        tapsCallback error);
+TAPS_CTX *tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
+        tapsCallback received, tapsCallback error);
 void tapsPreconnectionFree(TAPS_CTX *pc);
 void tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped);
 int tapsListenerFree(TAPS_CTX *listener);

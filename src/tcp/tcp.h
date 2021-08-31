@@ -23,6 +23,6 @@
 
 /*int initiate(struct sockaddr *remote, char *local, TAPS_CTX *transportProps,
         TAPS_CTX *securityProps);*/
-int Listen(void *taps_ctx, struct sockaddr *local,
+int Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
         ConnectionReceivedCb newConnCb, EstablishmentErrorCb error);
 void ListenStop(void *proto_ctx, StoppedCb cb);

@@ -31,12 +31,7 @@
 #include <stdio.h>
 #include "../src/taps.h"
 
-static int quit = 0;
-
-static void sighandler(int signal) {
-    printf("killing server\n");
-    quit = 1;
-}
+static struct event_base *base;
 
 /* Callbacks */
 void
@@ -91,7 +86,6 @@ listenerError(TAPS_CTX *ctx, void *data, size_t data_len)
     if (tapsListenerFree(ctx) < 0) {
         printf("Listener free failed.\n");
     }
-    quit = 1;
 }
 
 void
@@ -101,7 +95,15 @@ listenerStopped(TAPS_CTX *ctx, void *data, size_t data_len)
     if (tapsListenerFree(ctx) < 0) {
         printf("Listener free failed.\n");
     }
-    quit = 1;
+    event_base_loopbreak(base);
+}
+
+static void sighandler(evutil_socket_t fd, short events, void *arg)
+{
+    TAPS_CTX *listener = arg;
+
+    tapsListenerStop(listener, &listenerStopped);
+    printf("killing server\n");
 }
 
 /* This program is entirely sychronize, except handling the interrupt
@@ -110,9 +112,9 @@ int
 main(int argc, char *argv[])
 {
     TAPS_CTX *ep, *tp, *pc, *listener;
-    sigset_t sigset; /* Signal handler */
-    struct sigaction siginfo;
+    struct event *sigint;
 
+    base = event_base_new();
     /* Configure endpoint */
     ep = tapsEndpointNew();
     if (!ep) {
@@ -142,7 +144,7 @@ main(int argc, char *argv[])
         return -1;
     }
     /* Treat close and abort the same way */
-    listener = tapsPreconnectionListen(pc, &listenerConnRcvd, &listenerError);
+    listener = tapsPreconnectionListen(pc, base, &listenerConnRcvd, &listenerError);
     if (!listener) {
         printf("Listen failed\n");
         return -1;
@@ -152,22 +154,12 @@ main(int argc, char *argv[])
     tapsEndpointFree(ep);
     tapsTransportPropertiesFree(tp);
 
-    /* Create infinite loop that will continue until terminated by SIGINT or
-       SIGTERM. */
-    sigemptyset(&sigset);
-    siginfo.sa_handler = sighandler;
-    siginfo.sa_mask = sigset;
-    siginfo.sa_flags = SA_RESTART;
-    sigaction(SIGINT, &siginfo, NULL);
-    sigaction(SIGTERM, &siginfo, NULL);
+    sigint = event_new(base, SIGINT, EV_SIGNAL, sighandler, listener);
+    event_add(sigint, NULL);
+    event_base_dispatch(base);
 
-    /* Wait for SIGINT */
-    while (!quit);
-
-    /* Wait for Stopped signal */
-    quit = 0;
-    tapsListenerStop(listener, &listenerStopped);
-    while (!quit);
-
+    event_del(sigint);
+    event_free(sigint);
+    event_base_free(base);
     return 1;
 }

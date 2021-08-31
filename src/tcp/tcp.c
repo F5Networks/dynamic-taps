@@ -70,13 +70,6 @@ fail:
 }
 #endif
 
-static void *
-wait_for_event(void *base)
-{
-    event_base_loop((struct event_base *)base, 0);
-    pthread_exit(NULL);
-}
-
 /* Connection context */
 struct conn_ctx {
     int                 fd;
@@ -116,7 +109,8 @@ fail:
 }
 
 void *
-Listen(void *taps_ctx, struct sockaddr *local, ConnectionReceivedCb newConnCb,
+Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
+        ConnectionReceivedCb newConnCb,
         EstablishmentErrorCb error)
 {
     struct listener_ctx *listener;
@@ -125,7 +119,7 @@ Listen(void *taps_ctx, struct sockaddr *local, ConnectionReceivedCb newConnCb,
 
     listener = malloc(sizeof(struct listener_ctx));
     if (!listener) return NULL;
-    listener->base = NULL;
+    listener->base = base;
     listener->event = NULL;
     listener->fd = socket(local->sa_family, SOCK_STREAM, 0);
     if (listener->fd < 0) goto fail;
@@ -133,9 +127,6 @@ Listen(void *taps_ctx, struct sockaddr *local, ConnectionReceivedCb newConnCb,
     listener->error = error;
     listener->taps_ctx = taps_ctx;
     evutil_make_socket_nonblocking(listener->fd);
-
-    listener->base = event_base_new();
-    if (!listener->base) goto fail;
 
 #ifndef WIN32
     {
@@ -155,18 +146,10 @@ Listen(void *taps_ctx, struct sockaddr *local, ConnectionReceivedCb newConnCb,
     listener->event = event_new(listener->base, listener->fd,
             EV_READ | EV_PERSIST, newConn, (void *)listener);
     event_add(listener->event, NULL);
-    /* Start thread to wait for events */
-    if (pthread_create(&listener->thread, NULL, &wait_for_event,
-            (void *)listener->base) < 0) {
-        goto fail;
-    }
 
     return listener;
 fail:
     /* listener must exist to get here */
-    if (listener->base) {
-        event_base_free(listener->base);
-    }
     free(listener);
     if (listener->fd > -1) {
         close(listener->fd);
@@ -182,9 +165,6 @@ ListenStop(void *proto_ctx, StoppedCb cb)
 {
     struct listener_ctx *ctx = proto_ctx;
 
-    if (event_base_loopbreak(ctx->base) < 0) {
-        /* Handle failure? */
-    }
     event_del(ctx->event);
     event_free(ctx->event);
     ctx->event = NULL;
