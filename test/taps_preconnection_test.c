@@ -48,7 +48,7 @@ int preconnectionTest()
     if (strcmp(pc->protocol[0].name, "_kernel_TCP") != 0) goto fail;
     if (strcmp(pc->protocol[0].protocol, "TCP") != 0) goto fail;
     if (strcmp(pc->protocol[0].libpath,
-                "/home/mduke/taps/lib/libtaps_tcp.so") != 0) goto fail;
+                "/usr/lib/x86_64-linux-gnu/libtaps_tcp.so") != 0) goto fail;
     if (pc->transport != tp) goto fail;
     if (pc->security != NULL) goto fail;
     result = 1;

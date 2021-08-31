@@ -37,6 +37,7 @@
 *.hex
 t
 echoapp
+core
 
 # Debug files
 *.dSYM/

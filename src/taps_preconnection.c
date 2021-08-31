@@ -309,8 +309,8 @@ newConn(void *taps_ctx, void *proto_ctx)
 }
 
 TAPS_CTX *
-tapsPreconnectionListen(TAPS_CTX *preconn, tapsCallback received,
-        tapsCallback error)
+tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
+        tapsCallback received, tapsCallback error)
 {
     int                i;
     tapsPreconnection *pc = (tapsPreconnection *)preconn;
@@ -375,13 +375,13 @@ tapsPreconnectionListen(TAPS_CTX *preconn, tapsCallback received,
         sin6.sin6_port = htons(pc->local[0]->port);
         memcpy(&sin6.sin6_addr, &pc->local[0]->ipv6, sizeof(struct in6_addr));
         /* XXX Add error handler */
-        l->protoHandle = (l->listenHandle)(l, (struct sockaddr *)&sin6,
+        l->protoHandle = (l->listenHandle)(l, base, (struct sockaddr *)&sin6,
                 &newConn, NULL);
     } else {
         sin.sin_family = AF_INET;
         sin.sin_addr.s_addr = pc->local[0]->ipv4.s_addr;
         sin.sin_port = htons(pc->local[0]->port);
-        l->protoHandle = (l->listenHandle)(l, (struct sockaddr *)&sin,
+        l->protoHandle = (l->listenHandle)(l, base, (struct sockaddr *)&sin,
                 &newConn, NULL);
     }
     if (!l->protoHandle) {
@@ -405,9 +405,9 @@ listenStop(void *taps_ctx)
     if (!ctx->stopped) {
         return; /* Can't stop twice! */
     }
+    dlclose(ctx->protoHandle); /* XXX check for errors */
     (*(ctx->stopped))((TAPS_CTX *)taps_ctx, NULL, 0);
     ctx->stopped = NULL; /* Mark this as dead */
-    dlclose(ctx->protoHandle); /* XXX check for errors */
     ctx->protoHandle = NULL;
 }
 
