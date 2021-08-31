@@ -405,9 +405,9 @@ listenStop(void *taps_ctx)
     if (!ctx->stopped) {
         return; /* Can't stop twice! */
     }
+    dlclose(ctx->protoHandle); /* XXX check for errors */
     (*(ctx->stopped))((TAPS_CTX *)taps_ctx, NULL, 0);
     ctx->stopped = NULL; /* Mark this as dead */
-    dlclose(ctx->protoHandle); /* XXX check for errors */
     ctx->protoHandle = NULL;
 }
 
