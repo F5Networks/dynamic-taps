@@ -79,15 +79,6 @@ protocols[1] = {
     },
 };
 
-typedef struct {
-    int                       handle;
-    void                     *lib; /* Handle for the dynamic library */
-    tapsCallback             *event, *error;
-    /* Endpoints? */
-    tapsConnectionProperties *properties;
-} tapsConnection;
-
-
 #define MARK_PREFERENCE(attr)            \
     switch (transport.attr) {            \
     case TAPS_REQUIRE:                   \
@@ -115,6 +106,21 @@ freeProtocol(tapsProtocol *proto)
     proto->libpath = NULL;
 }
 #endif
+
+typedef struct {
+    tapsEndpoint  *local[TAPS_MAX_ENDPOINTS];
+    int            numLocal;
+    tapsEndpoint  *remote[TAPS_MAX_ENDPOINTS];
+    int            numRemote;
+    /* XXX what would be the effect of the application messing with the
+       libpath here? Security problem? */
+    tapsProtocol   protocol[TAPS_MAX_PROTOCOL_CANDIDATES];
+    int            numProtocols;
+    transportProperties *transport;
+    void                *security;
+} tapsPreconnection;
+
+int tapsUpdateProtocols(tapsProtocol *next, int slotsRemaining);
 
 static int
 numberOfSetBits(uint32_t i)
@@ -290,7 +296,7 @@ fail:
 }
 
 static void
-newConn(void *taps_ctx, void *proto_ctx)
+_taps_connection_received(void *taps_ctx, void *proto_ctx)
 {
     tapsListener   *listener = taps_ctx;
     tapsConnection *conn = malloc(sizeof(tapsConnection));
@@ -362,7 +368,7 @@ tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
     }
     /* We won't need stopHandle for a while, but if it's going to fail, fail it
        now rather than allow listeners to hang */
-    l->stopHandle = dlsym(l->protoHandle, "ListenStop");
+    l->stopHandle = dlsym(l->protoHandle, "Stop");
     if (!l->stopHandle) {
         printf("Couldn't get ListenStop handle: %s\n", dlerror());
         dlclose(l->protoHandle);
@@ -380,13 +386,13 @@ tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
         memcpy(&sin6.sin6_addr, &pc->local[0]->ipv6, sizeof(struct in6_addr));
         /* XXX Add error handler */
         l->protoHandle = (l->listenHandle)(l, base, (struct sockaddr *)&sin6,
-                &newConn, NULL);
+                &_taps_connection_received, NULL);
     } else {
         sin.sin_family = AF_INET;
         sin.sin_addr.s_addr = pc->local[0]->ipv4.s_addr;
         sin.sin_port = htons(pc->local[0]->port);
         l->protoHandle = (l->listenHandle)(l, base, (struct sockaddr *)&sin,
-                &newConn, NULL);
+                &_taps_connection_received, NULL);
     }
     if (!l->protoHandle) {
         printf("No protoHandle\n");
@@ -401,8 +407,8 @@ fail:
     return NULL;
 }
 
-void
-listenStop(void *taps_ctx)
+static void
+_taps_stopped(void *taps_ctx)
 {
     tapsListener *ctx = taps_ctx;
 
@@ -423,7 +429,7 @@ tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped)
 
     TAPS_TRACE();
     ctx->stopped = stopped;
-    (ctx->stopHandle)(ctx->protoHandle, &listenStop);
+    (ctx->stopHandle)(ctx->protoHandle, &_taps_stopped);
     return;
 }
 

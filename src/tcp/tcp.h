@@ -25,4 +25,4 @@
         TAPS_CTX *securityProps);*/
 int Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
         ConnectionReceivedCb newConnCb, EstablishmentErrorCb error);
-void ListenStop(void *proto_ctx, StoppedCb cb);
+void Stop(void *proto_ctx, StoppedCb cb);

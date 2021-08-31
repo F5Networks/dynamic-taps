@@ -42,7 +42,7 @@ typedef void (*StoppedCb)(void *);
    failure. */
 /* XXX Add more arguments (SNI, Certificate, ALPN, etc) */
 /* Add socket options? */
-typedef void *(*listenHandle)(void *, struct event_base *, struct sockaddr *, ConnectionReceivedCb,
-        EstablishmentErrorCb);
+typedef void *(*listenHandle)(void *, struct event_base *, struct sockaddr *,
+        ConnectionReceivedCb, EstablishmentErrorCb);
 /* Must be a function "listenStop" */
-typedef void (*listenStopHandle)(void *, StoppedCb);
+typedef void (*stopHandle)(void *, StoppedCb);

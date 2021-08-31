@@ -34,43 +34,44 @@
 static struct event_base *base;
 
 /* Callbacks */
-void
-sendRecvError(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_send_error(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
 }
 
-void
-sendExpired(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_expired(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
 }
 
-void
-connSent(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_sent(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
 }
 
-void
-connRcv(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_received(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
-//    tapsConnectionSend(ctx, data, data_len, NULL, FALSE, &connSent,
-//            &sendExpired, &sendRecvError);
+//    tapsConnectionSend(ctx, data, data_len, NULL, FALSE, &appConnSent,
+//            &appSendExpired, &appSendRecvError);
     /* Get ready for more! */
-//    tapsConnectionReceive(conn, 0, 0, &connRcv, &connRcv, &sendRecvError);
+//    tapsConnectionReceive(conn, 0, 0, &appConnRcv, &appConnRcv,
+   // &appSendRecvError);
 }
 
-void
-connClose(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_closed(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
 //    tapsConnectionFree(ctx);
 }
 
-void
-listenerConnRcvd(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_connection_received(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     //TAPS_CTX *conn = data;
     TAPS_TRACE();
@@ -79,8 +80,8 @@ listenerConnRcvd(TAPS_CTX *ctx, void *data, size_t data_len)
     return;
 }
 
-void
-listenerError(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_establishment_error(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
     tapsListenerFree(ctx);
@@ -89,8 +90,8 @@ listenerError(TAPS_CTX *ctx, void *data, size_t data_len)
     }
 }
 
-void
-listenerStopped(TAPS_CTX *ctx, void *data, size_t data_len)
+static void
+_app_stopped(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
     if (tapsListenerFree(ctx) < 0) {
@@ -99,12 +100,13 @@ listenerStopped(TAPS_CTX *ctx, void *data, size_t data_len)
     event_base_loopbreak(base);
 }
 
-static void sighandler(evutil_socket_t fd, short events, void *arg)
+static void
+_app_sighandler(evutil_socket_t fd, short events, void *arg)
 {
     TAPS_CTX *listener = arg;
 
     TAPS_TRACE();
-    tapsListenerStop(listener, &listenerStopped);
+    tapsListenerStop(listener, &_app_stopped);
     printf("killing server\n");
 }
 
@@ -146,7 +148,8 @@ main(int argc, char *argv[])
         return -1;
     }
     /* Treat close and abort the same way */
-    listener = tapsPreconnectionListen(pc, base, &listenerConnRcvd, &listenerError);
+    listener = tapsPreconnectionListen(pc, base, &_app_connection_received, 
+            &_app_establishment_error);
     if (!listener) {
         printf("Listen failed\n");
         return -1;
@@ -156,7 +159,7 @@ main(int argc, char *argv[])
     tapsEndpointFree(ep);
     tapsTransportPropertiesFree(tp);
 
-    sigint = event_new(base, SIGINT, EV_SIGNAL, sighandler, listener);
+    sigint = event_new(base, SIGINT, EV_SIGNAL, _app_sighandler, listener);
     event_add(sigint, NULL);
     event_base_dispatch(base);
 
