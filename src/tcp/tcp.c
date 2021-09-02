@@ -74,6 +74,10 @@ fail:
 struct conn_ctx {
     int                 fd;
     struct event_base  *base;
+    struct event       *event;
+    ClosedCb            closed;
+    ConnectionErrorCb   connectionError;
+    void               *taps_ctx;
 };
 
 struct listener_ctx {
@@ -81,10 +85,24 @@ struct listener_ctx {
     struct event         *event;
     evutil_socket_t       fd;
     pthread_t             thread;
-    ConnectionReceivedCb  newConn;
-    EstablishmentErrorCb  error;
+    ConnectionReceivedCb  connectionReceived;
+    EstablishmentErrorCb  establishmentError;
+    ClosedCb              closed;
+    ConnectionErrorCb     connectionError;
     void                 *taps_ctx;
 };
+
+static void
+_proto_closed(evutil_socket_t sock, short event, void *arg)
+{
+    struct conn_ctx *cctx = arg;
+
+    event_del(cctx->event);
+    event_free(cctx->event);
+    close(cctx->fd);
+    (cctx->closed)(cctx->taps_ctx);
+    free(cctx);
+}
 
 static void
 _proto_connection_received(evutil_socket_t listener, short event, void *arg)
@@ -100,10 +118,23 @@ _proto_connection_received(evutil_socket_t listener, short event, void *arg)
     cctx->fd = accept(listener, (struct sockaddr *)&ss, &slen);
     if (cctx->fd < 0) goto fail;
     evutil_make_socket_nonblocking(cctx->fd);
-    (lctx->newConn)(lctx->taps_ctx, cctx);
+    cctx->base = lctx->base;
+    cctx->event = event_new(cctx->base, cctx->fd, EV_CLOSED, &_proto_closed,
+            cctx);
+    if (event_add(cctx->event, NULL) < 0) {
+        printf("TCP could not add closed event\n");
+        event_free(cctx->event);
+    }
+    cctx->closed = lctx->closed;
+    cctx->connectionError = lctx->connectionError;
+    cctx->taps_ctx = (lctx->connectionReceived)(lctx->taps_ctx, cctx);
+    if (!cctx->taps_ctx) {
+        goto fail;
+    }
     return;
 fail:
     if (cctx) {
+        close(cctx->fd);
         free(cctx);
     }
     return;
@@ -111,7 +142,8 @@ fail:
 
 void *
 Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
-        ConnectionReceivedCb newConnCb, EstablishmentErrorCb error,
+        ConnectionReceivedCb connectionReceived,
+        EstablishmentErrorCb establishmentError,
         ClosedCb closed, ConnectionErrorCb connectionError)
 {
     struct listener_ctx *listener;
@@ -125,8 +157,10 @@ Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
     listener->event = NULL;
     listener->fd = socket(local->sa_family, SOCK_STREAM, 0);
     if (listener->fd < 0) goto fail;
-    listener->newConn = newConnCb;
-    listener->error = error;
+    listener->connectionReceived = connectionReceived;
+    listener->establishmentError = establishmentError;
+    listener->closed = closed;
+    listener->connectionError = connectionError;
     listener->taps_ctx = taps_ctx;
     evutil_make_socket_nonblocking(listener->fd);
 

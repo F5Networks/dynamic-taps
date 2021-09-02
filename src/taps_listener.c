@@ -24,14 +24,6 @@
 #include <string.h>
 #include "taps_internals.h"
 
-struct proto_handles {
-    void             *proto;
-    listenHandle      listen;
-    stopHandle        stop;
-    sendHandle        send;
-    receiveHandle     receive;
-};
-
 typedef struct {
     void                *proto_ctx; /* Opaque blob for use by the protocol */
     struct proto_handles handles;
@@ -47,26 +39,21 @@ typedef struct {
     int                  baseCreatedHere; /* Did the app provide the base? */
 } tapsListener;
 
-static void
+static void *
 _taps_connection_received(void *taps_ctx, void *proto_ctx)
 {
-    tapsListener   *listener = taps_ctx;
-    tapsConnection *conn = malloc(sizeof(tapsConnection));
+    tapsListener   *l = taps_ctx;
+    TAPS_CTX       *conn;
 
     TAPS_TRACE();
+    conn = tapsConnectionNew(proto_ctx, &l->handles, l, l->closed,
+            l->connectionError);
     if (conn == NULL) {
-        /* XXX Stop the listener */
-        return;
+        return NULL;
     }
-    conn->context = proto_ctx;
-    conn->state = TAPS_CONNECTED; /* No candidates for servers */
-    conn->libpath = listener->handles.proto;
-    /* XXX localIf */
-    /* XXX remote */
-    conn->listener = listener;
-    listener->ref_count++;
-    conn->nextCandidate = NULL;
-    (*(listener->connectionReceived))(listener, conn, sizeof(tapsConnection));
+    l->ref_count++;
+    (*(l->connectionReceived))(l, conn, sizeof(TAPS_CTX *));
+    return conn;
 }
 
 static void
@@ -82,16 +69,6 @@ _taps_stopped(void *taps_ctx)
     }
     l->stopped = NULL; /* Mark this as dead */
     (*stopped)((TAPS_CTX *)taps_ctx, NULL, 0);
-}
-
-static void
-_taps_closed(void *taps_ctx)
-{
-}
-
-static void
-_taps_connection_error(void *taps_ctx)
-{
 }
 
 TAPS_CTX *
@@ -179,6 +156,17 @@ tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped)
     l->stopped = stopped;
     (l->handles.stop)(l->proto_ctx, &_taps_stopped);
     return;
+}
+
+void
+tapsListenerDeref(TAPS_CTX *listener)
+{
+    tapsListener     *l = (tapsListener *)listener;
+
+    l->ref_count--;
+    if (l->readyToFree && (l->ref_count == 0)) {
+        free(l);
+    }
 }
 
 int

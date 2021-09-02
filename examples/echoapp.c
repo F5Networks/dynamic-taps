@@ -67,15 +67,16 @@ static void
 _app_closed(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
-//    tapsConnectionFree(ctx);
+    tapsConnectionFree(ctx);
 }
 
 static void
 _app_connection_received(TAPS_CTX *ctx, void *data, size_t data_len)
 {
-    //TAPS_CTX *conn = data;
+    TAPS_CTX *conn = data;
     TAPS_TRACE();
     /* Do the same thing for "partial" and full inputs */
+
 //    tapsConnectionReceive(conn, 0, 0, &connRcv, &connRcv, &sendRecvError);
     return;
 }

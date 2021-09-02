@@ -233,21 +233,22 @@ typedef struct {
 
 int tapsUpdateProtocols(tapsProtocol *next, int slotsRemaining);
 
+/* Convenience data structure for TAPS to store the protocol symbols. */
+struct proto_handles {
+    void             *proto;
+    listenHandle      listen;
+    stopHandle        stop;
+    sendHandle        send;
+    receiveHandle     receive;
+};
+
 TAPS_CTX *tapsListenerNew(char *libpath, struct sockaddr *addr,
         struct event_base *base,
         tapsCallback connectionReceived, tapsCallback establishmentError,
         tapsCallback closed, tapsCallback connectionError);
+void tapsListenerDeref(TAPS_CTX *listener);
 
-typedef enum { TAPS_START, TAPS_HAVEADDR, TAPS_CONNECTING, TAPS_CONNECTED }
-        tapsCandidateState;
-
-typedef struct _tapsConnection {
-    void              *context; /* socket descriptor, openSSL context, etc. */
-    tapsCandidateState state;
-    char              *libpath;
-    char              *localIf;
-    struct sockaddr   *remote;
-    TAPS_CTX          *listener; /* NULL for Initiated connections */
-    struct _tapsConnection *nextCandidate;
-} tapsConnection;
+void _taps_closed(void *taps_ctx);
+void _taps_connection_error(void *taps_ctx);
+TAPS_CTX *tapsConnectionNew();
 #endif /* _TAPS_INTERNALS_H */

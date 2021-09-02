@@ -210,13 +210,14 @@ struct _node {
     LIST_ENTRY(struct _node);
 };
 
+/* XXX this code is out of date */
 int
 tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
         tapsCallback *error, int timeout)
 {
     int                result = 0, i;
     tapsPreconnection *pc = (tapsPreconnection *)preconn;
-    tapsConnection    *c, *startc = NULL;
+//    tapsConnection    *c, *startc = NULL;
     tapsEndpoint      *ep;
     tapsPreference     pref;
     struct ifaddrs    *ifa;
@@ -286,11 +287,13 @@ tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
     }
     result = 1;
 fail:
+#if 0
     while (startc != NULL) {
         c = startc;
         startc = startc->nextCandidate;
         free(c);
     }
+#endif
     return result;
 }
 
