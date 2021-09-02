@@ -19,25 +19,72 @@
 
 #include <stdlib.h>
 #include "taps_internals.h"
-#include "taps_protocol.h"
-#include "taps.h"
 
-/* Callbacks */
-static void
-_taps_closed(void *ctx)
+typedef enum { TAPS_START, TAPS_HAVEADDR, TAPS_CONNECTING, TAPS_CONNECTED }
+        tapsCandidateState;
+
+typedef struct _tapsConnection {
+    void                 *proto_ctx; /* socket descriptor, openSSL ctx, etc. */
+    struct proto_handles *handles;
+    tapsCandidateState    state;
+    tapsCallback          sent;
+    tapsCallback          expired;
+    tapsCallback          sendError;
+    tapsCallback          received;
+    tapsCallback          receivedPartial;
+    tapsCallback          receiveError;
+    tapsCallback          closed;
+    tapsCallback          connectionError;
+    //char               *localIf;
+    //struct sockaddr    *remote;
+    TAPS_CTX             *listener; /* NULL for Initiated connections */
+} tapsConnection;
+
+void
+_taps_closed(void *taps_ctx)
 {
-    tapsConnection *conn = ctx;
-#if 0
-    (conn->close)((TAPS_CTX *)ctx, NULL, 0);
-    conn->context = NULL;
-    conn->protoHandle = NULL;
-    _taps_listener_deref(conn->listener);
-#endif
+    tapsConnection *c = taps_ctx;
+
+    TAPS_TRACE();
+    if (c->listener) {
+        tapsListenerDeref(c->listener);
+        c->listener = NULL;
+    } else {
+        free(c->handles);
+    }
+    (c->closed)(taps_ctx, NULL, 0);
 }
 
-static void
-_taps_connection_error(void *ctx)
+void
+_taps_connection_error(void *taps_ctx)
 {
+    tapsConnection *c = taps_ctx;
+
+    TAPS_TRACE();
+    if (c->listener) {
+        tapsListenerDeref(c->listener);
+        c->listener = NULL;
+    } else {
+        free(c->handles);
+    }
+    (c->connectionError)(taps_ctx, NULL, 0);
+}
+
+TAPS_CTX *
+tapsConnectionNew(void *proto_ctx, struct proto_handles *handles,
+        TAPS_CTX *listener, tapsCallback closed, tapsCallback connectionError)
+{
+    tapsConnection *c = malloc(sizeof(tapsConnection));
+
+    TAPS_TRACE();
+    if (!c) return c;
+    c->proto_ctx = proto_ctx;
+    c->handles = handles;
+    c->state = TAPS_CONNECTED;
+    c->closed = closed;
+    c->connectionError = connectionError;
+    c->listener = listener;
+    return c;
 }
 
 void
@@ -60,5 +107,7 @@ tapsConnectionReceive(TAPS_CTX *connection, size_t minIncompleteLength,
 void
 tapsConnectionFree(TAPS_CTX *connection)
 {
+    TAPS_TRACE();
+    /* If no listener, we should free the protocol handle */
     free(connection);
 }

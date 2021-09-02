@@ -281,11 +281,11 @@ void tapsClose(int connection, tapsCallback *closed, tapsCallback *error);
 void tapsAbort(int connection, tapsCallback *error);
 void tapsCloseGroup(int connection);
 void tapsAbortGroup(int connection);
+#endif
 
 /* We could just free the connection on the closed event, but the application
    might want to query metadata to free its state */
 void tapsConnectionFree(TAPS_CTX *connection);
-#endif
 
 #if 0
 /* Applications should never have to use the structures below, but they are a

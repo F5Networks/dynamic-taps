@@ -27,9 +27,9 @@
 /* Callbacks, from the protocols to TAPS, for various events */
 /* The first void is the TAPS context for the component that throws the event.
    For example, a ConnectionReceived event is thrown by the listener. */
-/* The second void * is hhe new, opaque protocol connection context for the
-   protocol. */
-typedef void (*ConnectionReceivedCb)(void *, void *);
+/* The second void * is the new, opaque protocol connection context for the
+   protocol. It returns the taps context */
+typedef void *(*ConnectionReceivedCb)(void *, void *);
 typedef void (*EstablishmentErrorCb)(void *); /* XXX add reason code or errno */
 typedef void (*StoppedCb)(void *);
 /* Connection Context */
