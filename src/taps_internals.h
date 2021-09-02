@@ -233,18 +233,10 @@ typedef struct {
 
 int tapsUpdateProtocols(tapsProtocol *next, int slotsRemaining);
 
-typedef struct {
-    void             *protoHandle;
-    listenHandle      listenHandle;
-    stopHandle        stopHandle;
-    void             *proto_ctx; /* Opaque blob for use by the protocol */
-    tapsCallback      received;
-    tapsCallback      error;
-    tapsCallback      stopped;
-    uint32_t          ref_count;
-    uint32_t          conn_limit;
-    int               readyToFree;
-} tapsListener;
+TAPS_CTX *tapsListenerNew(char *libpath, struct sockaddr *addr,
+        struct event_base *base,
+        tapsCallback connectionReceived, tapsCallback establishmentError,
+        tapsCallback closed, tapsCallback connectionError);
 
 typedef enum { TAPS_START, TAPS_HAVEADDR, TAPS_CONNECTING, TAPS_CONNECTED }
         tapsCandidateState;
@@ -255,7 +247,7 @@ typedef struct _tapsConnection {
     char              *libpath;
     char              *localIf;
     struct sockaddr   *remote;
-    tapsListener      *listener; /* NULL for Initiated connections */
+    TAPS_CTX          *listener; /* NULL for Initiated connections */
     struct _tapsConnection *nextCandidate;
 } tapsConnection;
 #endif /* _TAPS_INTERNALS_H */

@@ -111,8 +111,8 @@ fail:
 
 void *
 Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
-        ConnectionReceivedCb newConnCb,
-        EstablishmentErrorCb error)
+        ConnectionReceivedCb newConnCb, EstablishmentErrorCb error,
+        ClosedCb closed, ConnectionErrorCb connectionError)
 {
     struct listener_ctx *listener;
     size_t               addr_size = (local->sa_family == AF_INET) ?
@@ -176,4 +176,14 @@ Stop(void *proto_ctx, StoppedCb cb)
     free(proto_ctx);
     /* Thread should be dead */
     (*cb)(ctx->taps_ctx);
+}
+
+void
+Send(void *proto_ctx, void *data, size_t data_len)
+{
+}
+
+void
+Receive(void *proto_ctx, void *data, size_t data_len)
+{
 }

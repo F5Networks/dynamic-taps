@@ -24,5 +24,8 @@
 /*int initiate(struct sockaddr *remote, char *local, TAPS_CTX *transportProps,
         TAPS_CTX *securityProps);*/
 int Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
-        ConnectionReceivedCb newConnCb, EstablishmentErrorCb error);
+        ConnectionReceivedCb newConnCb, EstablishmentErrorCb establishmentError,
+        ClosedCb closed, ConnectionErrorCb connectionError);
 void Stop(void *proto_ctx, StoppedCb cb);
+void Send(void *proto_ctx, void *data, size_t data_len);
+void Receive(void *proto_ctx, void *data, size_t data_len);

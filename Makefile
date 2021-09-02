@@ -19,7 +19,7 @@ lib/libtaps_tcp.so: src/tcp/tcp.c
 	rm -f lib/tcp.o
 
 bin/%.o: src/%.c
-	$(CC) $(CCFLAGS) -c $< -o $@ -lyaml -ldl -fPIC -I .
+	$(CC) $(CCFLAGS) -c $< -o $@ -lyaml -levent -ldl -fPIC -I .
 
 install: lib/libtaps.so lib/libtaps_tcp.so
 	cp lib/libtaps.so /usr/lib/x86_64-linux-gnu/
@@ -35,10 +35,10 @@ TEST_SOURCES := $(filter-out test/t.c, $(wildcard test/*.c))
 TEST_OBJECTS := $(TEST_SOURCES:%.c=%.o)
 
 test/%.o: test/%.c
-	$(CC) $(CCFLAGS) -c $< -o $@ -lyaml -I test/
+	$(CC) $(CCFLAGS) -c $< -o $@ -I test/
 
 test: $(TEST_OBJECTS) $(OBJECTS)
-	$(CC) $(CCFLAGS) -o test/t $(OBJECTS) $(TEST_OBJECTS) test/t.c -lyaml -ldl -I test/
+	$(CC) $(CCFLAGS) -o test/t $(OBJECTS) $(TEST_OBJECTS) test/t.c -levent -lyaml -ldl -I test/
 	./test/t
 
 # Builds for examples
