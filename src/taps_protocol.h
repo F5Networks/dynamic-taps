@@ -32,17 +32,37 @@
 typedef void (*ConnectionReceivedCb)(void *, void *);
 typedef void (*EstablishmentErrorCb)(void *); /* XXX add reason code or errno */
 typedef void (*StoppedCb)(void *);
+/* Connection Context */
+typedef void (*SentCb)(void *);
+typedef void (*ReceivedCb)(void *, void *, size_t);
+typedef void (*ReceivedPartialCb)(void *);
+typedef void (*ReceiveErrorCb)(void *); /* XXX add reason? */
+typedef void (*ClosedCb)(void *); /* Connection Closed */
+typedef void (*ConnectionErrorCb)(void *);
 
-/* There must be a function "listen" with the following arguments:
-   * tapsCtx: an opaque pointer the protocol must return?
-   * local: the address to bind to.
-   * cb: a function the protocol should call when there's a new connection
+/* There must be a function "Listen" with the following arguments:
+   * void *: an opaque pointer the protocol must return?$
+   * struct event_base *: an eventing framework so that the protocol doesn't$
+     have to spawn new threads. It can ignore this, and do its own thing, just$
+     using the callbacks, but this is likely to be inefficient$
+   * struct sockaddr *: the address to bind to.$
+   * ConnectionReceivedCb: a function the protocol should call when there's a$
+     new connection$
+   * EstablishmentErrorCb: callback for listener creation errors$
+   * ClosedCb: Callback for a _connection_ spawned by the listener that closes$
+   * ConnectionError: Callback for an error on a conn spawned by the listener.
 
    Returns a pointer to a protocol-specific context, NULL if there's an early
-   failure. */
+   failure.
+*/
 /* XXX Add more arguments (SNI, Certificate, ALPN, etc) */
 /* Add socket options? */
 typedef void *(*listenHandle)(void *, struct event_base *, struct sockaddr *,
-        ConnectionReceivedCb, EstablishmentErrorCb);
-/* Must be a function "listenStop" */
+        ConnectionReceivedCb, EstablishmentErrorCb, ClosedCb,
+        ConnectionErrorCb);
+/* Must be a function "Stop" */
 typedef void (*stopHandle)(void *, StoppedCb);
+/* Must be named "Send" */
+typedef void (*sendHandle)(void *, void *, size_t);
+/* Must be named "Receive" */;
+typedef void (*receiveHandle)(void *, void *, size_t);

@@ -218,9 +218,18 @@ int tapsInitiateWithSend(int preconnection, unsigned int timeoutSec,
 /* We need to include handlers for connection close and abort that will be
    installed in connections that are returned with received(). */
 TAPS_CTX *tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
-        tapsCallback received, tapsCallback error);
+        tapsCallback connectionReceived, tapsCallback establishmentError,
+        tapsCallback closed, tapsCallback connectionError);
 void tapsPreconnectionFree(TAPS_CTX *pc);
 void tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped);
+/* Warning: DO NOT call tapsListenerFree in the "stopped" callback function.
+   The stopped callback function is likely called by the protocol
+   implementation's own callback. tapsListenerFree will close the shared
+   library, meaning that the callback will try to return to cleared process
+   memory and segfault.
+
+   Instead, use the callback to terminate the event loop, and then call
+   tapsListenerFree. */
 int tapsListenerFree(TAPS_CTX *listener);
 
 #if 0

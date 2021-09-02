@@ -18,7 +18,6 @@
  */
 
 //#include <linux/if.h>
-#include <dlfcn.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -295,158 +294,52 @@ fail:
     return result;
 }
 
-static void
-_taps_connection_received(void *taps_ctx, void *proto_ctx)
-{
-    tapsListener   *listener = taps_ctx;
-    tapsConnection *conn = malloc(sizeof(tapsConnection));
-
-    TAPS_TRACE();
-    if (conn == NULL) {
-        /* XXX Stop the listener */
-        return;
-    }
-    conn->context = proto_ctx;
-    conn->state = TAPS_CONNECTED; /* No candidates for servers */
-    conn->libpath = listener->protoHandle;
-    /* XXX localIf */
-    /* XXX remote */
-    conn->listener = listener;
-    listener->ref_count++;
-    conn->nextCandidate = NULL;
-    (*(listener->received))(listener, conn, sizeof(tapsConnection));
-}
-
 TAPS_CTX *
 tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
-        tapsCallback received, tapsCallback error)
+        tapsCallback connectionReceived, tapsCallback establishmentError,
+        tapsCallback closed, tapsCallback connectionError)
 {
-    int                i;
-    tapsPreconnection *pc = (tapsPreconnection *)preconn;
-    tapsListener      *l = NULL;
+    int                 i;
+    tapsPreconnection  *pc = (tapsPreconnection *)preconn;
+    TAPS_CTX           *l = NULL;
     struct sockaddr_in  sin;
     struct sockaddr_in6 sin6;
+    struct sockaddr    *addr;
 
     TAPS_TRACE();
     if (pc->numLocal < 1) {
         errno = EINVAL;
         printf("No local endpoints\n");
-        goto fail;
+        return NULL;
     }
     for (i = 0; i < pc->numLocal; i++) {
         if (!pc->local[0]->has_port) {
             errno = EINVAL;
-            goto fail;
+            return NULL;
         }
         if (!pc->local[0]->has_ipv4 && !pc->local[0]->has_ipv6) {
             /* XXX Resolve it, check for IPv6 */
             errno = EINVAL;
-            goto fail;
+            return NULL;
         }
     }
-    l = malloc(sizeof(tapsListener));
-    if (l == NULL) {
-        printf("Couldn't malloc listener\n");
-        errno = ENOMEM;
-        goto fail;
-    }
     /* XXX Pick the best protocol, not just the first */
-    l->protoHandle = dlopen(pc->protocol[0].libpath, RTLD_LAZY);
-    if (!l->protoHandle) {
-        printf("Couldn't get protocol handle: %s\n", dlerror());
-        free(l);
-        l = NULL;
-        goto fail;
-    }
-    l->listenHandle = dlsym(l->protoHandle, "Listen");
-    if (!l->listenHandle) {
-        printf("Couldn't get Listen handle: %s\n", dlerror());
-        dlclose(l->protoHandle);
-        free(l);
-        l = NULL;
-        goto fail;
-    }
-    /* We won't need stopHandle for a while, but if it's going to fail, fail it
-       now rather than allow listeners to hang */
-    l->stopHandle = dlsym(l->protoHandle, "Stop");
-    if (!l->stopHandle) {
-        printf("Couldn't get ListenStop handle: %s\n", dlerror());
-        dlclose(l->protoHandle);
-        free(l);
-        l = NULL;
-        goto fail;
-    }
-    l->conn_limit = UINT32_MAX;
-    l->readyToFree = 0;
     /* XXX Check all the local endpoints */
     /* Just do ipv6 if present, else ipv4, for now */
     if (pc->local[0]->has_ipv6) {
         sin6.sin6_family = AF_INET6;
-        sin6.sin6_port = htons(pc->local[0]->port);
         memcpy(&sin6.sin6_addr, &pc->local[0]->ipv6, sizeof(struct in6_addr));
-        /* XXX Add error handler */
-        l->protoHandle = (l->listenHandle)(l, base, (struct sockaddr *)&sin6,
-                &_taps_connection_received, NULL);
+        sin6.sin6_port = htons(pc->local[0]->port);
+        addr = (struct sockaddr *)&sin6;
     } else {
         sin.sin_family = AF_INET;
         sin.sin_addr.s_addr = pc->local[0]->ipv4.s_addr;
         sin.sin_port = htons(pc->local[0]->port);
-        l->protoHandle = (l->listenHandle)(l, base, (struct sockaddr *)&sin,
-                &_taps_connection_received, NULL);
+        addr = (struct sockaddr *)&sin;
     }
-    if (!l->protoHandle) {
-        printf("No protoHandle\n");
-        goto fail;
-        /* XXX early failure */
-    }
-    l->received = received;
-    l->error = error;
+    l = tapsListenerNew(pc->protocol[0].libpath, addr, base, connectionReceived,
+            establishmentError, closed, connectionError);
     return l;
-fail:
-    if (l) free(l);
-    return NULL;
-}
-
-static void
-_taps_stopped(void *taps_ctx)
-{
-    tapsListener *ctx = taps_ctx;
-
-    TAPS_TRACE();
-    if (!ctx->stopped) {
-        return; /* Can't stop twice! */
-    }
-    dlclose(ctx->protoHandle); /* XXX check for errors */
-    (*(ctx->stopped))((TAPS_CTX *)taps_ctx, NULL, 0);
-    ctx->stopped = NULL; /* Mark this as dead */
-    ctx->protoHandle = NULL;
-}
-
-void
-tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped)
-{
-    tapsListener     *ctx = (tapsListener *)listener;
-
-    TAPS_TRACE();
-    ctx->stopped = stopped;
-    (ctx->stopHandle)(ctx->protoHandle, &_taps_stopped);
-    return;
-}
-
-int
-tapsListenerFree(TAPS_CTX *listener)
-{
-    tapsListener     *ctx = (tapsListener *)listener;
-
-    TAPS_TRACE();
-    if (!ctx->stopped) {
-        return -1;
-    }
-    ctx->readyToFree = 1;
-    if (ctx->ref_count == 0) {
-        free(ctx);
-    }
-    return 0;
 }
 
 void

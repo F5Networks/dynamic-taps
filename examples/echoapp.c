@@ -84,7 +84,6 @@ static void
 _app_establishment_error(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
-    tapsListenerFree(ctx);
     if (tapsListenerFree(ctx) < 0) {
         printf("Listener free failed.\n");
     }
@@ -94,9 +93,6 @@ static void
 _app_stopped(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
-    if (tapsListenerFree(ctx) < 0) {
-        printf("Listener free failed.\n");
-    }
     event_base_loopbreak(base);
 }
 
@@ -149,7 +145,7 @@ main(int argc, char *argv[])
     }
     /* Treat close and abort the same way */
     listener = tapsPreconnectionListen(pc, base, &_app_connection_received, 
-            &_app_establishment_error);
+            &_app_establishment_error, &_app_closed, &_app_closed);
     if (!listener) {
         printf("Listen failed\n");
         return -1;
@@ -163,6 +159,9 @@ main(int argc, char *argv[])
     event_add(sigint, NULL);
     event_base_dispatch(base);
 
+    if (tapsListenerFree(listener) < 0) {
+        printf("Listener free failed.\n");
+    }
     event_del(sigint);
     event_free(sigint);
     event_base_free(base);
