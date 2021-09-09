@@ -170,6 +170,13 @@ int tapsTransportPropertiesSet(TAPS_CTX *tp, char *propertyName,
         tapsPreference preference);
 void tapsTransportPropertiesFree(TAPS_CTX *tp);
 
+/* Messages (Sec 9.1) */
+/* Create a message with a single buffer */
+TAPS_CTX *tapsMessageNew(void *data, size_t len);
+void *tapsMessageGetFirstBuf(TAPS_CTX *messgage, size_t *len);
+void tapsMessageFree(TAPS_CTX *message);
+
+
 /* "local" and "remote" point to an array of endpoints */
 /*
  * Warning! Calling tapsPreconnectionNew does not freeze the contents of the
@@ -259,8 +266,8 @@ void tapsGetProperty(int connection, char *propertyName, void *value);
 #endif
 
 /* Sending (Sec 7.2) */
-void tapsConnectionSend(TAPS_CTX *connection, void *data, size_t data_len,
-        tapsCallback *sent, tapsCallback *expired, tapsCallback *error);
+void tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg,
+        tapsCallback sent, tapsCallback expired, tapsCallback sendError);
 #if 0
 void tapsStartBatch(int connection);
 void tapsEndBatch(int connection);
@@ -268,12 +275,12 @@ void tapsEndBatch(int connection);
 
 /* Receiving (Sec 7.3) */
 /*
- * Set minIncompleteLength >= maxLength to have no limit; 
- * maxLength == 0: no limit
+ * maxLength is no more than the size of the buffer.
  */
-void tapsConnectionReceive(TAPS_CTX *connection, size_t minIncompleteLength,
-        size_t maxLength, tapsCallback *received, tapsCallback *receivedPartial,
-        tapsCallback *error);
+void tapsConnectionReceive(TAPS_CTX *connection, void *buf,
+        size_t minIncompleteLength, size_t maxLength,
+        tapsCallback received, tapsCallback receivedPartial,
+        tapsCallback receiveError);
 
 #if 0
 /* Termination (Sec 8) */
@@ -286,6 +293,7 @@ void tapsAbortGroup(int connection);
 /* We could just free the connection on the closed event, but the application
    might want to query metadata to free its state */
 void tapsConnectionFree(TAPS_CTX *connection);
+
 
 #if 0
 /* Applications should never have to use the structures below, but they are a

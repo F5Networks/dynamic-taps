@@ -28,6 +28,9 @@
 #ifndef _TAPS_INTERNALS_H
 #define _TAPS_INTERNALS_H
 
+#define TRUE 1
+#define FALSE 0
+
 /* Linked List template. The type must be a struct with an element LIST_ENTRY */
 #define LIST_HEAD(name, type)       \
 struct name {                       \

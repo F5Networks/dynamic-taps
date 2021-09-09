@@ -21,8 +21,8 @@
 /* These are structs useful for protocol implementations trying to interface
    with taps. */
 
+#include <event2/event.h>
 #include <sys/socket.h>
-#include "taps.h"
 
 /* Callbacks, from the protocols to TAPS, for various events */
 /* The first void is the TAPS context for the component that throws the event.
@@ -34,8 +34,10 @@ typedef void (*EstablishmentErrorCb)(void *); /* XXX add reason code or errno */
 typedef void (*StoppedCb)(void *);
 /* Connection Context */
 typedef void (*SentCb)(void *);
+typedef void (*ExpiredCb)(void *);
+typedef void (*SendErrorCb)(void *);
 typedef void (*ReceivedCb)(void *, void *, size_t);
-typedef void (*ReceivedPartialCb)(void *);
+typedef void (*ReceivedPartialCb)(void *, void *, size_t);
 typedef void (*ReceiveErrorCb)(void *); /* XXX add reason? */
 typedef void (*ClosedCb)(void *); /* Connection Closed */
 typedef void (*ConnectionErrorCb)(void *);
@@ -63,6 +65,10 @@ typedef void *(*listenHandle)(void *, struct event_base *, struct sockaddr *,
 /* Must be a function "Stop" */
 typedef void (*stopHandle)(void *, StoppedCb);
 /* Must be named "Send" */
-typedef void (*sendHandle)(void *, void *, size_t);
+/* args: proto context, taps context, message context; then callbacks */
+typedef void (*sendHandle)(void *, void *, void *, SentCb, ExpiredCb,
+        SendErrorCb);
 /* Must be named "Receive" */;
-typedef void (*receiveHandle)(void *, void *, size_t);
+/* args: proto context, callbacks */
+typedef void (*receiveHandle)(void *, void *, void *, size_t,
+        ReceivedCb, ReceivedPartialCb, ReceiveErrorCb);

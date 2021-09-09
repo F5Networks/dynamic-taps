@@ -49,6 +49,7 @@ _taps_connection_received(void *taps_ctx, void *proto_ctx)
     conn = tapsConnectionNew(proto_ctx, &l->handles, l, l->closed,
             l->connectionError);
     if (conn == NULL) {
+        printf("tapsConnectionNew failed\n");
         return NULL;
     }
     l->ref_count++;

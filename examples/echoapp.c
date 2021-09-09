@@ -31,36 +31,58 @@
 #include <stdio.h>
 #include "../src/taps.h"
 
+#define BUF_SIZE 1024
+
 static struct event_base *base;
+uint8_t                   buf[BUF_SIZE];
 
 /* Callbacks */
 static void
 _app_send_error(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
+    tapsMessageFree(data);
 }
 
 static void
 _app_expired(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
+    tapsMessageFree(data);
 }
 
 static void
 _app_sent(TAPS_CTX *ctx, void *data, size_t data_len)
 {
     TAPS_TRACE();
+    tapsMessageFree(data);
 }
+
+void _app_received_partial(TAPS_CTX *ctx, void *data, size_t data_len);
 
 static void
 _app_received(TAPS_CTX *ctx, void *data, size_t data_len)
 {
+    _app_received_partial(ctx, data, data_len);
+    /* XXX The only difference here is we've gotten FIN from the peer; so
+       maybe we should call tapsConnectionClose()? */
+}
+
+void
+_app_received_partial(TAPS_CTX *ctx, void *data, size_t data_len)
+{
+    TAPS_CTX *msg = data;
+    void     *text;
+    size_t    len;
     TAPS_TRACE();
-//    tapsConnectionSend(ctx, data, data_len, NULL, FALSE, &appConnSent,
-//            &appSendExpired, &appSendRecvError);
+//    tapsConnectionSend(ctx, data, &_app_sent, &_app_expired, &_app_send_error);
+    text = tapsMessageGetFirstBuf(msg, &len);
+    *(char *)(text + len) = '\0';
+    printf("Received %s\n", (char *)text);
+    tapsMessageFree(msg);
     /* Get ready for more! */
-//    tapsConnectionReceive(conn, 0, 0, &appConnRcv, &appConnRcv,
-   // &appSendRecvError);
+    tapsConnectionReceive(ctx, buf, 0, BUF_SIZE, &_app_received,
+            &_app_received_partial, &_app_send_error);
 }
 
 static void
@@ -77,7 +99,8 @@ _app_connection_received(TAPS_CTX *ctx, void *data, size_t data_len)
     TAPS_TRACE();
     /* Do the same thing for "partial" and full inputs */
 
-//    tapsConnectionReceive(conn, 0, 0, &connRcv, &connRcv, &sendRecvError);
+    tapsConnectionReceive(conn, buf, 0, BUF_SIZE, &_app_received,
+            &_app_received_partial, &_app_send_error);
     return;
 }
 
