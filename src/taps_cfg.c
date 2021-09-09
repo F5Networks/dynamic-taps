@@ -84,7 +84,6 @@ tapsParseYaml(FILE *yaml, tapsProtocol *protocol, int space)
         case YAML_DOCUMENT_END_EVENT:
             STATE_MUST_BE(DOCUMENT);
             if (!got_name || !got_path || !got_proto) {
-                printf("not everything\n"); // mhd
                 goto fail;
             }
             eventLevel = STREAM;

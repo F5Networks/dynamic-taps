@@ -22,7 +22,6 @@
 #include <errno.h>
 #include <event2/event.h>
 #include <event2/util.h>
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -74,17 +73,30 @@ fail:
 struct conn_ctx {
     int                 fd;
     struct event_base  *base;
-    struct event       *event;
+    struct event       *closeEvent;
+    struct event       *sendEvent;
+    struct event       *receiveEvent;
+    struct event       *errorEvent;
     ClosedCb            closed;
     ConnectionErrorCb   connectionError;
+    SentCb              sent;
+    ExpiredCb           expired;
+    SendErrorCb         sendError;
+    ReceivedCb          received;
+    ReceivedPartialCb   receivedPartial;
+    ReceiveErrorCb      receiveError;
+    /* Opaque pointers for TAPS */
     void               *taps_ctx;
+    void               *send_ctx;
+    void               *receive_ctx;
+    void               *receive_buffer;
+    size_t              receive_buffer_size;
 };
 
 struct listener_ctx {
     struct event_base    *base;
     struct event         *event;
     evutil_socket_t       fd;
-    pthread_t             thread;
     ConnectionReceivedCb  connectionReceived;
     EstablishmentErrorCb  establishmentError;
     ClosedCb              closed;
@@ -97,11 +109,37 @@ _proto_closed(evutil_socket_t sock, short event, void *arg)
 {
     struct conn_ctx *cctx = arg;
 
-    event_del(cctx->event);
-    event_free(cctx->event);
+    event_del(cctx->closeEvent);
+    event_free(cctx->closeEvent);
+    event_del(cctx->sendEvent);
+    event_free(cctx->sendEvent);
+    event_del(cctx->receiveEvent);
+    event_free(cctx->receiveEvent);
     close(cctx->fd);
     (cctx->closed)(cctx->taps_ctx);
     free(cctx);
+}
+
+static void
+_proto_sent(evutil_socket_t sock, short event, void *arg)
+{
+    struct conn_ctx *c = arg;
+
+    (c->sent)(c->send_ctx);
+}
+
+static void
+_proto_received(evutil_socket_t sock, short event, void *arg)
+{
+    ssize_t bytes;
+    struct conn_ctx *c = arg;
+
+    bytes = read(c->fd, c->receive_buffer, c->receive_buffer_size);
+    if (bytes < 0) {
+        /* XXX Call receiveError */
+        return;
+    }
+    (c->receivedPartial)(c->receive_ctx, c->receive_buffer, bytes);
 }
 
 static void
@@ -112,18 +150,23 @@ _proto_connection_received(evutil_socket_t listener, short event, void *arg)
     socklen_t                slen = sizeof(ss);
     struct conn_ctx         *cctx;
 
-    TAPS_TRACE();
+    //TAPS_TRACE();
     cctx = malloc(sizeof(struct conn_ctx));
     if (!cctx) goto fail;
     cctx->fd = accept(listener, (struct sockaddr *)&ss, &slen);
     if (cctx->fd < 0) goto fail;
     evutil_make_socket_nonblocking(cctx->fd);
     cctx->base = lctx->base;
-    cctx->event = event_new(cctx->base, cctx->fd, EV_CLOSED, &_proto_closed,
+    cctx->closeEvent = event_new(cctx->base, cctx->fd, EV_CLOSED,
+            &_proto_closed, cctx);
+    cctx->sendEvent = event_new(cctx->base, cctx->fd, EV_WRITE, _proto_sent,
             cctx);
-    if (event_add(cctx->event, NULL) < 0) {
+    cctx->receiveEvent = event_new(cctx->base, cctx->fd, EV_READ,
+            _proto_received, cctx);
+    cctx->errorEvent = NULL;
+    if (event_add(cctx->closeEvent, NULL) < 0) {
         printf("TCP could not add closed event\n");
-        event_free(cctx->event);
+        event_free(cctx->closeEvent);
     }
     cctx->closed = lctx->closed;
     cctx->connectionError = lctx->connectionError;
@@ -150,7 +193,7 @@ Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
     size_t               addr_size = (local->sa_family == AF_INET) ?
             sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
 
-    TAPS_TRACE();
+    //TAPS_TRACE();
     listener = malloc(sizeof(struct listener_ctx));
     if (!listener) return NULL;
     listener->base = base;
@@ -202,22 +245,73 @@ Stop(void *proto_ctx, StoppedCb cb)
     struct listener_ctx *ctx = proto_ctx;
     void  *taps_ctx = ctx->taps_ctx;
 
-    TAPS_TRACE();
+    //TAPS_TRACE();
     event_del(ctx->event);
     event_free(ctx->event);
-    ctx->event = NULL;
     close(ctx->fd);
     free(proto_ctx);
     /* Thread should be dead */
     (*cb)(ctx->taps_ctx);
 }
 
-void
-Send(void *proto_ctx, void *data, size_t data_len)
+int
+Send(void *proto_ctx, void *taps_ctx, void *message, SentCb sent,
+        ExpiredCb expired, SendErrorCb sendError)
 {
+#if 0
+    struct conn_ctx    *c = proto_ctx;
+    struct iovec       *iovec;
+    int                 iov_len;
+    ssize_t             retval;
+
+    if (!c->sent) {
+        c->sent = sent;
+        c->expired = expired;
+        c->sendError = sendError;
+    }
+    if (event_pending(c->sendEvent, EV_WRITE, NULL)) {
+        printf("Sending with event pending!\n");
+        return -1;
+    }
+    c->send_ctx = taps_ctx;
+    /* Ready to send */
+    iovec = tapsMessageGetIovec(message, &iov_len);
+    retval = writev(c->fd, iovec, iov_len);
+    if (retval < 0) {
+        return -1;
+    }
+    if (event_add(c->sendEvent, NULL) < 0) { /* XXX Add timeouts */
+        return -1;;
+    }
+    return retval;
+#endif
+    return 0;
 }
 
-void
-Receive(void *proto_ctx, void *data, size_t data_len)
+int
+Receive(void *proto_ctx, void *taps_ctx, void *buf, size_t buf_size,
+        ReceivedCb received, ReceivedPartialCb receivedPartial,
+        ReceiveErrorCb receiveError)
 {
+    struct conn_ctx    *c = proto_ctx;
+    struct iovec       *iovec;
+    int                 iov_len;
+    ssize_t             retval;
+
+    if (!c->received) {
+        c->received = received;
+        c->receivedPartial = receivedPartial;
+        c->receiveError = receiveError;
+    }
+    if (event_pending(c->receiveEvent, EV_READ, NULL)) {
+        printf("Two TCP recv at once\n");
+        return -1;
+    }
+    c->receive_ctx = taps_ctx;
+    if (event_add(c->receiveEvent, NULL) < 0) { /* XXX Add timeouts */
+        return -1;;
+    }
+    c->receive_buffer = buf;
+    c->receive_buffer_size = buf_size;
+    return 0;
 }
