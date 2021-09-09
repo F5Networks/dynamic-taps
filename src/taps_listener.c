@@ -35,7 +35,7 @@ typedef struct {
     uint32_t             ref_count;
     uint32_t             conn_limit;
     struct event_base   *base;
-    int                  readyToFree;
+    int                  readyToStop;
     int                  baseCreatedHere; /* Did the app provide the base? */
 } tapsListener;
 
@@ -68,8 +68,11 @@ _taps_stopped(void *taps_ctx)
         printf("We already stopped\n");
         return; /* Can't stop twice! */
     }
-    l->stopped = NULL; /* Mark this as dead */
-    (*stopped)((TAPS_CTX *)taps_ctx, NULL, 0);
+    l->readyToStop = TRUE;
+    if (l->ref_count == 0) {
+        l->stopped = NULL; /* Mark this as dead */
+        (*stopped)((TAPS_CTX *)taps_ctx, NULL, 0);
+    }
 }
 
 TAPS_CTX *
@@ -162,11 +165,13 @@ tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped)
 void
 tapsListenerDeref(TAPS_CTX *listener)
 {
-    tapsListener     *l = (tapsListener *)listener;
+    tapsListener *l = (tapsListener *)listener;
+    tapsCallback  stopped = l->stopped;
 
     l->ref_count--;
-    if (l->readyToFree && (l->ref_count == 0)) {
-        free(l);
+    if (l->readyToStop && (l->ref_count == 0)) {
+        l->stopped = NULL;
+        (*stopped)((TAPS_CTX *)listener, NULL, 0);
     }
 }
 
@@ -181,11 +186,6 @@ tapsListenerFree(TAPS_CTX *listener)
         return -1;
     }
     dlclose(l->handles.proto); /* XXX check for errors */
-    l->readyToFree = 1;
-    if (l->ref_count == 0) {
-        free(l);
-    } else {
-        printf("Open connections, not freeing yet\n");
-    }
+    free(l);
     return 0;
 }
