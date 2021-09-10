@@ -62,6 +62,15 @@ tapsMessageGetFirstBuf(TAPS_CTX *message, size_t *len)
     return buf->iov_base;
 }
 
+struct iovec *
+tapsMessageGetIovec(TAPS_CTX *message, int *iovcnt)
+{
+    tapsMessage *m = (tapsMessage *)message;
+
+    *iovcnt = m->iovcnt;
+    return (m->list ? m->list : &(m->buf));
+}
+
 void
 tapsMessageFree(TAPS_CTX *message)
 {
