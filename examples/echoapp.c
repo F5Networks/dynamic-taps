@@ -103,14 +103,16 @@ _app_received_partial(void *conn, void *msg, TAPS_CTX *data, int eom)
     size_t           len;
 
     TAPS_TRACE();
-//    tapsConnectionSend(ctx, data, &_app_sent, &_app_expired, &_app_send_error);
     m->taps = data;
     text = tapsMessageGetFirstBuf(m->taps, &len);
     *(char *)(text + len) = '\0';
     printf("Received %s\n", (char *)text);
-    tapsMessageFree(m->taps);
+    if (tapsConnectionSend(c->taps, m->taps, m, &c->l->callbacks) < 0) {
+        printf("Send failed\n");
+        tapsMessageFree(m->taps);
+        free(m);
+    }
     /* Get ready for more! */
-    free(m);
     m = malloc(sizeof(struct app_msg));
     if (!m) {
         printf("malloc failed, not receiving anymore\n");

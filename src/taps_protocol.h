@@ -23,6 +23,7 @@
 
 #include <event2/event.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 
 /* Callbacks, from the protocols to TAPS, for various events */
 /* The first void is the TAPS context for the component that throws the event.
@@ -65,9 +66,9 @@ typedef void *(*listenHandle)(void *, struct event_base *, struct sockaddr *,
 /* Must be a function "Stop" */
 typedef void (*stopHandle)(void *, StoppedCb);
 /* Must be named "Send" */
-/* args: proto context, taps context, message context; then callbacks */
-typedef void (*sendHandle)(void *, void *, void *, SentCb, ExpiredCb,
-        SendErrorCb);
+/* args: proto context, taps context, data, iovcnt; then callbacks */
+typedef void (*sendHandle)(void *, void *, struct iovec *, int, SentCb,
+        ExpiredCb, SendErrorCb);
 /* Must be named "Receive" */;
 /* args: proto context, callbacks */
 typedef void (*receiveHandle)(void *, void *, void *, size_t,

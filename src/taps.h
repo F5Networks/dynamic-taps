@@ -322,11 +322,12 @@ void tapsGetProperty(int connection, char *propertyName, void *value);
 /* Create a message with a single buffer */
 TAPS_CTX *tapsMessageNew(void *data, size_t len);
 void *tapsMessageGetFirstBuf(TAPS_CTX *message, size_t *len);
+struct iovec *tapsMessageGetIovec(TAPS_CTX *message, int *iovcnt);
 void tapsMessageFree(TAPS_CTX *message);
 
 
 /* Sending (Sec 9.2) */
-void tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg,
+int tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg, void *app_ctx,
         tapsCallbacks *callbacks);
 #if 0
 void tapsStartBatch(int connection);

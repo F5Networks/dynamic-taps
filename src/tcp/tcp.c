@@ -135,7 +135,7 @@ _tcp_received(evutil_socket_t sock, short event, void *arg)
     struct conn_ctx *c = arg;
 
     bytes = read(c->fd, c->receive_buffer, c->receive_buffer_size);
-    printf("read %u bytes\n", bytes);
+    printf("read %lu bytes\n", bytes);
     if (bytes < 0) {
         /* XXX Call receiveError */
         return;
@@ -259,13 +259,10 @@ Stop(void *proto_ctx, StoppedCb cb)
 }
 
 int
-Send(void *proto_ctx, void *taps_ctx, void *message, SentCb sent,
-        ExpiredCb expired, SendErrorCb sendError)
+Send(void *proto_ctx, void *taps_ctx, struct iovec *message, int iovcnt,
+        SentCb sent, ExpiredCb expired, SendErrorCb sendError)
 {
-#if 0
     struct conn_ctx    *c = proto_ctx;
-    struct iovec       *iovec;
-    int                 iov_len;
     ssize_t             retval;
 
     if (!c->sent) {
@@ -279,8 +276,7 @@ Send(void *proto_ctx, void *taps_ctx, void *message, SentCb sent,
     }
     c->send_ctx = taps_ctx;
     /* Ready to send */
-    iovec = tapsMessageGetIovec(message, &iov_len);
-    retval = writev(c->fd, iovec, iov_len);
+    retval = writev(c->fd, message, iovcnt);
     if (retval < 0) {
         return -1;
     }
@@ -288,8 +284,6 @@ Send(void *proto_ctx, void *taps_ctx, void *message, SentCb sent,
         return -1;;
     }
     return retval;
-#endif
-    return 0;
 }
 
 int

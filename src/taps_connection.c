@@ -147,49 +147,93 @@ tapsConnectionInitialize(TAPS_CTX *conn, void *app_ctx,
     c->connectionError = callbacks->connectionError;
 }
 
-static void
-_taps_sent(TAPS_CTX *conn, TAPS_CTX *msg)
-{
-
-}
+void _taps_sent(void *item_ctx);
+void _taps_expired(void *item_ctx);
+void _taps_send_error(void *item_ctx);
 
 static void
-_taps_expired(TAPS_CTX *conn, TAPS_CTX *msg)
+_taps_send_common(tapsConnection *c, struct _send_item *item)
 {
+    struct _send_item *next = item->next;
+    struct iovec *data;
+    int           iovcnt;
 
-}
-
-static void
-_taps_send_error(TAPS_CTX *conn, TAPS_CTX *msg)
-{
-
+    data = tapsMessageGetIovec(item->message, &iovcnt);
+    DELETE_ITEM(item, &(c->sndq));
+    if (!next) {
+        c->sendReady = TRUE;
+        return;
+    }
+    (c->handles->send)(c->proto_ctx, item, data, iovcnt, &_taps_sent,
+            &_taps_expired, &_taps_send_error);
 }
 
 void
-tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg,
+_taps_sent(void *item_ctx)
+{
+    struct _send_item *item = item_ctx;
+    tapsConnection    *c = item->connection;
+    tapsCbSent         cb = item->sent;
+    void              *app = item->app_ctx;
+
+    TAPS_TRACE();
+    _taps_send_common(c, item);
+    (cb)(c->app_ctx, app);
+}
+
+void
+_taps_expired(void *item_ctx)
+{
+    struct _send_item *item = item_ctx;
+    tapsConnection    *c = item->connection;
+    tapsCbExpired      cb = item->expired;
+    void              *app = item->app_ctx;
+
+    TAPS_TRACE();
+    _taps_send_common(c, item);
+    (cb)(c->app_ctx, app);
+}
+
+void
+_taps_send_error(void *item_ctx)
+{
+    struct _send_item *item = item_ctx;
+    tapsConnection    *c = item->connection;
+    tapsCbSendError    cb = item->sendError;
+    void              *app = item->app_ctx;
+
+    TAPS_TRACE();
+    _taps_send_common(c, item);
+    (cb)(c->app_ctx, app, "Protocol failure");
+}
+
+int
+tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg, void *app_ctx,
         tapsCallbacks *callbacks)
 {
-#if 0
     tapsConnection *c = (tapsConnection *)connection;
-    struct _send_recv_item *newItem;
+    struct iovec *data;
+    int iovlen;
 
-    newItem = add_item(&c->sndq);
+    ADD_ITEM(_send_item, c->sndq);
     if (!newItem) {
-        (sendError)(connection, msg, 0);
-        return;
+        errno = ENOMEM;
+        printf("Sending failed\n");
+        return -1;
     }
-
-    newItem->msg = msg;
+    newItem->message = msg;
     newItem->connection = connection;
-    newItem->__sent = sent;
-    newItem->__expired = expired;
-    newItem->__sendError = sendError;
+    newItem->app_ctx = app_ctx;
+    newItem->sent = callbacks->sent;
+    newItem->expired = callbacks->expired;
+    newItem->sendError = callbacks->sendError;
 
     if (c->sendReady) {
-        (c->handles->send)(c->proto_ctx, newItem, msg, &_taps_sent,
+        data = tapsMessageGetIovec(msg, &iovlen);
+        (c->handles->send)(c->proto_ctx, newItem, data, iovlen, &_taps_sent,
                 &_taps_expired, &_taps_send_error);
     }
-#endif
+    return 0;
 }
 
 static void
