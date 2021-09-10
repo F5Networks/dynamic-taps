@@ -105,7 +105,7 @@ struct listener_ctx {
 };
 
 static void
-_proto_closed(evutil_socket_t sock, short event, void *arg)
+_tcp_closed(evutil_socket_t sock, short event, void *arg)
 {
     struct conn_ctx *cctx = arg;
 
@@ -121,7 +121,7 @@ _proto_closed(evutil_socket_t sock, short event, void *arg)
 }
 
 static void
-_proto_sent(evutil_socket_t sock, short event, void *arg)
+_tcp_sent(evutil_socket_t sock, short event, void *arg)
 {
     struct conn_ctx *c = arg;
 
@@ -129,21 +129,25 @@ _proto_sent(evutil_socket_t sock, short event, void *arg)
 }
 
 static void
-_proto_received(evutil_socket_t sock, short event, void *arg)
+_tcp_received(evutil_socket_t sock, short event, void *arg)
 {
     ssize_t bytes;
     struct conn_ctx *c = arg;
 
     bytes = read(c->fd, c->receive_buffer, c->receive_buffer_size);
+    printf("read %u bytes\n", bytes);
     if (bytes < 0) {
         /* XXX Call receiveError */
+        return;
+    }
+    if (bytes == 0) {
         return;
     }
     (c->receivedPartial)(c->receive_ctx, c->receive_buffer, bytes);
 }
 
 static void
-_proto_connection_received(evutil_socket_t listener, short event, void *arg)
+_tcp_connection_received(evutil_socket_t listener, short event, void *arg)
 {
     struct listener_ctx     *lctx = arg;
     struct sockaddr_storage  ss;
@@ -158,11 +162,11 @@ _proto_connection_received(evutil_socket_t listener, short event, void *arg)
     evutil_make_socket_nonblocking(cctx->fd);
     cctx->base = lctx->base;
     cctx->closeEvent = event_new(cctx->base, cctx->fd, EV_CLOSED,
-            &_proto_closed, cctx);
-    cctx->sendEvent = event_new(cctx->base, cctx->fd, EV_WRITE, _proto_sent,
+            &_tcp_closed, cctx);
+    cctx->sendEvent = event_new(cctx->base, cctx->fd, EV_WRITE, _tcp_sent,
             cctx);
     cctx->receiveEvent = event_new(cctx->base, cctx->fd, EV_READ,
-            _proto_received, cctx);
+            _tcp_received, cctx);
     cctx->errorEvent = NULL;
     if (event_add(cctx->closeEvent, NULL) < 0) {
         printf("TCP could not add closed event\n");
@@ -223,7 +227,7 @@ Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
         goto fail;
     }
     listener->event = event_new(listener->base, listener->fd,
-            EV_READ | EV_PERSIST, _proto_connection_received, (void *)listener);
+            EV_READ | EV_PERSIST, _tcp_connection_received, (void *)listener);
     event_add(listener->event, NULL);
 
     return listener;

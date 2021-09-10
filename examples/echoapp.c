@@ -29,165 +29,283 @@
 
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "../src/taps.h"
 
 #define BUF_SIZE 1024
+#define PRINT_RESULT(text, reason)    \
+    if (reason) printf(text ": %s\n", reason); else printf(text "\n");
 
-static struct event_base *base;
-uint8_t                   buf[BUF_SIZE];
+struct app_listener {
+    struct event_base *base;
+    TAPS_CTX          *taps;
+    tapsCallbacks      callbacks;
+};
+
+struct app_conn {
+    struct app_listener *l;
+    TAPS_CTX            *taps;
+};
+
+struct app_msg {
+    uint8_t              buf[BUF_SIZE];
+    TAPS_CTX            *taps;
+};
 
 /* Callbacks */
 static void
-_app_send_error(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_send_error(void *conn, void *msg, char *reason)
 {
+    struct app_msg *m = msg;
+
     TAPS_TRACE();
-    tapsMessageFree(data);
+    PRINT_RESULT("Sending failed", reason);
+    tapsMessageFree(m->taps);
 }
 
 static void
-_app_expired(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_expired(void *conn, void *msg)
 {
+    struct app_msg *m = msg;
+
     TAPS_TRACE();
-    tapsMessageFree(data);
+    tapsMessageFree(m->taps);
+    free(m);
 }
 
 static void
-_app_sent(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_sent(void *conn, void *msg)
 {
+    struct app_msg *m = msg;
+
     TAPS_TRACE();
-    tapsMessageFree(data);
+    tapsMessageFree(m->taps);
+    free(m);
 }
 
-void _app_received_partial(TAPS_CTX *ctx, void *data, size_t data_len);
+void _app_received_partial(void *conn, void *msg, TAPS_CTX *data, int eom);
 
 static void
-_app_received(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_received(void *conn, void *msg, TAPS_CTX *data)
 {
-    _app_received_partial(ctx, data, data_len);
+    _app_received_partial(conn, msg, data, 1);
     /* XXX The only difference here is we've gotten FIN from the peer; so
        maybe we should call tapsConnectionClose()? */
 }
 
 void
-_app_received_partial(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_received_partial(void *conn, void *msg, TAPS_CTX *data, int eom)
 {
-    TAPS_CTX *msg = data;
-    void     *text;
-    size_t    len;
+    struct app_conn *c = conn;
+    struct app_msg  *m = msg;
+    void            *text;
+    size_t           len;
+
     TAPS_TRACE();
 //    tapsConnectionSend(ctx, data, &_app_sent, &_app_expired, &_app_send_error);
-    text = tapsMessageGetFirstBuf(msg, &len);
+    m->taps = data;
+    text = tapsMessageGetFirstBuf(m->taps, &len);
     *(char *)(text + len) = '\0';
     printf("Received %s\n", (char *)text);
-    tapsMessageFree(msg);
+    tapsMessageFree(m->taps);
     /* Get ready for more! */
-    tapsConnectionReceive(ctx, buf, 0, BUF_SIZE, &_app_received,
-            &_app_received_partial, &_app_send_error);
+    free(m);
+    m = malloc(sizeof(struct app_msg));
+    if (!m) {
+        printf("malloc failed, not receiving anymore\n");
+        exit(-1);
+    }
+    tapsConnectionReceive(c->taps, m, m->buf, 0, BUF_SIZE, &c->l->callbacks);
 }
 
 static void
-_app_closed(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_receive_error(void *conn, void *msg, char *reason)
 {
+    struct app_msg *m = msg;
+
     TAPS_TRACE();
-    tapsConnectionFree(ctx);
+    PRINT_RESULT("Receive failed", reason);
+    free(m);
 }
 
 static void
-_app_connection_received(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_closed(void *conn)
 {
-    TAPS_CTX *conn = data;
-    TAPS_TRACE();
-    /* Do the same thing for "partial" and full inputs */
+    struct app_conn *c = conn;
 
-    tapsConnectionReceive(conn, buf, 0, BUF_SIZE, &_app_received,
-            &_app_received_partial, &_app_send_error);
-    return;
+    TAPS_TRACE();
+    tapsConnectionFree(c->taps);
+    free(c);
 }
 
 static void
-_app_establishment_error(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_connection_error(void *conn, char *reason)
 {
+    struct app_conn *c = conn;
+
     TAPS_TRACE();
-    if (tapsListenerFree(ctx) < 0) {
+    tapsConnectionFree(c->taps);
+    free(c);
+}
+
+static void *
+_app_connection_received(void *listener, TAPS_CTX *conn, void **cb)
+{
+    struct app_listener  *l = listener;
+    struct app_conn      *c = malloc(sizeof(struct app_conn));
+    struct app_msg       *m;
+
+    TAPS_TRACE();
+    if (!c) {
+        printf("malloc failed!\n");
+        exit -1;
+    }
+    c->l = l;
+    c->taps = conn;
+    *cb = (void *)&l->callbacks;
+    m = malloc(sizeof(struct app_msg));
+    if (!m) {
+        printf("malloc failed, not receiving anymore\n");
+        exit(-1);
+    }
+    tapsConnectionReceive(c->taps, m, m->buf, 0, BUF_SIZE, &c->l->callbacks);
+    return c;
+}
+
+static void
+_app_establishment_error(void *listener, char *reason)
+{
+    struct app_listener  *l = listener;
+
+    TAPS_TRACE();
+    PRINT_RESULT("Listener failed", reason);
+    if (tapsListenerFree(l->taps) < 0) {
         printf("Listener free failed.\n");
     }
+    free(l);
 }
 
 static void
-_app_stopped(TAPS_CTX *ctx, void *data, size_t data_len)
+_app_stopped(void *listener)
 {
+    struct app_listener  *l = listener;
+
     TAPS_TRACE();
-    event_base_loopbreak(base);
+    event_base_loopbreak(l->base);
 }
 
 static void
 _app_sighandler(evutil_socket_t fd, short events, void *arg)
 {
-    TAPS_CTX *listener = arg;
+    struct app_listener *l = arg;
 
     TAPS_TRACE();
-    tapsListenerStop(listener, &_app_stopped);
+    tapsListenerStop(l->taps, &l->callbacks);
     printf("killing server\n");
 }
+
+/* We could assign callbacks on the fly, but since these are totally invariant
+   we'll initialize them all here */
+const tapsCallbacks cbs = {
+    .connectionReceived = &_app_connection_received,
+    .establishmentError = &_app_establishment_error,
+    .stopped            = &_app_stopped,
+    .sent               = &_app_sent,
+    .expired            = &_app_expired,
+    .sendError          = &_app_send_error,
+    .received           = &_app_received,
+    .receivedPartial    = &_app_received_partial,
+    .receiveError       = &_app_receive_error,
+    .closed             = &_app_closed,
+    .connectionError    = &_app_connection_error,
+};
 
 /* This program is entirely sychronize, except handling the interrupt
    signal. A client written this way could be entirely synchronous. */
 int
 main(int argc, char *argv[])
 {
-    TAPS_CTX *ep, *tp, *pc, *listener;
-    struct event *sigint;
+    TAPS_CTX            *ep = NULL, *tp = NULL, *pc = NULL;
+    struct event        *sigint = NULL;
+    /* These have app-layer contexts. We could have just used the TAPS context
+       if the relevant state (buf, base) were global variables, but this is
+       cleaner. */
+    struct app_listener *l = NULL;
+    struct app_conn     *c = NULL;
 
-    base = event_base_new();
     /* Configure endpoint */
     ep = tapsEndpointNew();
     if (!ep) {
         printf("Endpoint failed\n");
-        return -1;
+        goto fail;
     }
     if (!tapsEndpointWithPort(ep, 5555)) {
         printf("Port failed\n");
-        return -1;
+        goto fail;
     }
     if (!tapsEndpointWithIPv4Address(ep, "127.0.0.1")) {
         printf("IP Address failed\n");
-        return -1;
+        goto fail;
     }
 
     /* Set properties */
     tp = tapsTransportPropertiesNew(TAPS_LISTENER);
     if (!tp) {
         printf("Transport Properties failed\n");
-        return -1;
+        goto fail;
     }
 
     /* Start connection */
     pc = tapsPreconnectionNew(&ep, 1, NULL, 0, tp, NULL);
     if (!pc) {
         printf("Preconnection failed\n");
-        return -1;
+        goto fail;
     }
+    l = malloc(sizeof(struct app_listener));
+    if (!l) {
+        goto fail;
+    }
+    l->taps = NULL;
+    l->base = event_base_new();
+    if (!l->base) {
+        goto fail;
+    }
+    memcpy(&l->callbacks, &cbs, sizeof(cbs));
     /* Treat close and abort the same way */
-    listener = tapsPreconnectionListen(pc, base, &_app_connection_received, 
-            &_app_establishment_error, &_app_closed, &_app_closed);
-    if (!listener) {
+    l->taps = tapsPreconnectionListen(pc, l, l->base, &l->callbacks);
+    if (!l->taps) {
         printf("Listen failed\n");
-        return -1;
+        goto fail;
     }
     /* Clean up */
     tapsPreconnectionFree(pc);
     tapsEndpointFree(ep);
     tapsTransportPropertiesFree(tp);
+    pc = NULL;
+    ep = NULL;
+    tp = NULL;
 
-    sigint = event_new(base, SIGINT, EV_SIGNAL, _app_sighandler, listener);
+    sigint = event_new(l->base, SIGINT, EV_SIGNAL, _app_sighandler, l);
     event_add(sigint, NULL);
-    event_base_dispatch(base);
+    event_base_dispatch(l->base);
 
-    if (tapsListenerFree(listener) < 0) {
+    if (tapsListenerFree(l->taps) < 0) {
         printf("Listener free failed.\n");
     }
     event_del(sigint);
     event_free(sigint);
-    event_base_free(base);
-    return 1;
+    event_base_free(l->base);
+    free(l);
+    return 0;
+fail:
+    if (pc) tapsPreconnectionFree(pc);
+    if (ep) tapsEndpointFree(ep);
+    if (tp) tapsTransportPropertiesFree(tp);
+    if (sigint) event_free(sigint);
+    if (l) {
+        if (l->taps) tapsListenerFree(l->taps);
+        if (l->base) event_base_free(l->base);
+        free(l);
+    }
 }
