@@ -18,6 +18,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include "taps_internals.h"
 
 #define MAX_RECVBUF_SIZE 65536
@@ -28,9 +29,10 @@ typedef enum { TAPS_START, TAPS_HAVEADDR, TAPS_CONNECTING, TAPS_CONNECTED }
 struct _send_item {
     void                   *message;
     TAPS_CTX               *connection;
-    tapsCallback            sent;
-    tapsCallback            expired;
-    tapsCallback            sendError;
+    void                   *app_ctx;
+    tapsCbSent              sent;
+    tapsCbExpired           expired;
+    tapsCbSendError         sendError;
     struct _send_item      *next, *prev;
 };
 
@@ -38,9 +40,10 @@ struct _recv_item {
     void                   *data;
     size_t                  minLength, maxLength, currLength;
     TAPS_CTX               *connection;
-    tapsCallback            received;
-    tapsCallback            receivedPartial;
-    tapsCallback            receiveError;
+    void                   *app_ctx;
+    tapsCbReceived          received;
+    tapsCbReceivedPartial   receivedPartial;
+    tapsCbReceiveError      receiveError;
     struct _recv_item      *next, *prev;
 };
 
@@ -62,18 +65,19 @@ struct _recv_item {
     if ((item)->next) {                        \
         (item)->next->prev = (item)->prev;     \
     } else {                                   \
-        (tail) = (item)->prev;                 \
+        (*tail) = (item)->prev;                 \
     }                                          \
     free(item);
 
 typedef struct {
     void                   *proto_ctx; /* socket, openSSL ctx, etc. */
-    struct proto_handles   *handles;
+    void                   *app_ctx;
+    struct proto_handles   *handles; /* Symbols for dynamic functions */
     tapsCandidateState      state;
     struct _send_item      *sndq; /* Pts to tail of list */
     struct _recv_item      *rcvq; /* Pts to tail of list */
-    tapsCallback            closed;
-    tapsCallback            connectionError;
+    tapsCbClosed            closed;
+    tapsCbConnectionError   connectionError;
     /* Only send one send or receive command to protocol at a time */
     int                     sendReady;
     int                     receiveReady;
@@ -94,7 +98,8 @@ _taps_closed(void *taps_ctx)
     } else {
         free(c->handles);
     }
-    (c->closed)(taps_ctx, NULL, 0);
+    c->proto_ctx = NULL;
+    if (c->closed) (c->closed)(c->app_ctx);
 }
 
 void
@@ -109,28 +114,37 @@ _taps_connection_error(void *taps_ctx)
     } else {
         free(c->handles);
     }
-    (c->connectionError)(taps_ctx, NULL, 0);
+    (c->connectionError)(c->app_ctx, NULL);
 }
 
 TAPS_CTX *
 tapsConnectionNew(void *proto_ctx, struct proto_handles *handles,
-        TAPS_CTX *listener, tapsCallback closed, tapsCallback connectionError)
+        TAPS_CTX *listener)
 {
     tapsConnection *c = malloc(sizeof(tapsConnection));
 
     TAPS_TRACE();
     if (!c) return c;
+    memset(c, 0, sizeof(tapsConnection));
     c->proto_ctx = proto_ctx;
     c->handles = handles;
     c->state = TAPS_CONNECTED;
-    c->sndq = NULL;
-    c->rcvq = NULL;
-    c->closed = closed;
-    c->connectionError = connectionError;
     c->listener = listener;
     c->sendReady = TRUE;
     c->receiveReady = TRUE;
     return c;
+}
+
+void
+tapsConnectionInitialize(TAPS_CTX *conn, void *app_ctx, 
+        tapsCallbacks *callbacks)
+{
+    tapsConnection *c = conn;
+
+    TAPS_TRACE();
+    c->app_ctx = app_ctx ? app_ctx : c;
+    c->closed = callbacks->closed;
+    c->connectionError = callbacks->connectionError;
 }
 
 static void
@@ -153,7 +167,7 @@ _taps_send_error(TAPS_CTX *conn, TAPS_CTX *msg)
 
 void
 tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg,
-        tapsCallback sent, tapsCallback expired, tapsCallback sendError)
+        tapsCallbacks *callbacks)
 {
 #if 0
     tapsConnection *c = (tapsConnection *)connection;
@@ -192,12 +206,14 @@ _taps_receive_error(TAPS_CTX *item_ctx)
 static void
 _taps_received_partial(void *item_ctx, void *data, size_t data_len)
 {
-    struct _recv_item *item = item_ctx;
-    struct _recv_item *next_item;
-    tapsConnection    *c = item->connection;
-    tapsCallback       fn;
-    TAPS_CTX          *msg;
-    size_t             len;
+    struct _recv_item     *item = item_ctx;
+    struct _recv_item     *next_item;
+    tapsConnection        *c = item->connection;
+    tapsCbReceiveError     rcvError;
+    tapsCbReceivedPartial  rcvPart;
+    TAPS_CTX              *msg;
+    void                  *app_ctx;
+    size_t                 len;
 
     item->currLength += data_len;
     /* Send it back if not enough length */
@@ -209,6 +225,13 @@ _taps_received_partial(void *item_ctx, void *data, size_t data_len)
         return;
     }
     msg = tapsMessageNew(item->data, item->currLength);
+    if (!msg) {
+        rcvError = item->receiveError;
+        app_ctx = item->app_ctx;
+        DELETE_ITEM(item, &(c->rcvq));
+        (rcvError)(c->app_ctx, app_ctx, "Message Malloc failed");
+        return;
+    }
     if (item->next) {
         /* Queue up the next receive */
         (c->handles->receive)(c->proto_ctx, item->next, item->next->data,
@@ -218,40 +241,60 @@ _taps_received_partial(void *item_ctx, void *data, size_t data_len)
         /* Nothing else to do */
         c->receiveReady = TRUE;
     }
-    fn = item->receivedPartial;
-    DELETE_ITEM(item, c->rcvq);
-    (fn)(c, msg, 0);
+    rcvPart = item->receivedPartial;
+    app_ctx = item->app_ctx;
+    DELETE_ITEM(item, &(c->rcvq));
+    (rcvPart)(c->app_ctx, app_ctx, msg, FALSE);
 }
 
-void
-tapsConnectionReceive(TAPS_CTX *connection, void *buf,
-        size_t minIncompleteLength, size_t maxLength, tapsCallback received,
-        tapsCallback receivedPartial, tapsCallback receiveError)
+int
+tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
+        size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks)
 {
     tapsConnection *c = (tapsConnection *)connection;
 
     TAPS_TRACE();
+    if (!callbacks || !callbacks->received || !callbacks->receivedPartial ||
+            !callbacks->receiveError) {
+        printf("Not enough callbacks");
+        errno = EINVAL;
+        return -1;
+    }
     ADD_ITEM(_recv_item, c->rcvq);
-    newItem->received = received;
-    newItem->receivedPartial = receivedPartial;
-    newItem->receiveError = receiveError;
+    newItem->received = callbacks->received;
+    newItem->receivedPartial = callbacks->receivedPartial;
+    newItem->receiveError = callbacks->receiveError;
     newItem->data = buf;
     newItem->minLength = minIncompleteLength;
     newItem->maxLength = maxLength;
     newItem->currLength = 0;
     newItem->connection = c;
+    newItem->app_ctx = app_ctx;
 
     if (c->receiveReady) {
         c->receiveReady = FALSE;
         (c->handles->receive)(c->proto_ctx, newItem, newItem->data, maxLength,
                 &_taps_received, &_taps_received_partial, &_taps_receive_error);
     }
+    return 0;
 }
 
 void
 tapsConnectionFree(TAPS_CTX *connection)
 {
+    tapsConnection *c = connection;
+
     TAPS_TRACE();
+    while (c->sndq) {
+        (c->sndq->sendError)(c->app_ctx, c->sndq->app_ctx, "Connection died");
+        DELETE_ITEM(c->sndq, &(c->sndq));
+    }
+    while (c->rcvq) {
+        (c->rcvq->receiveError)(c->app_ctx, c->rcvq->app_ctx,
+                "Connection died");
+        DELETE_ITEM(c->rcvq, &(c->rcvq));
+    }
+
     /* If no listener, we should free the protocol handle */
     free(connection);
 }

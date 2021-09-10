@@ -25,60 +25,61 @@
 #include "taps_internals.h"
 
 typedef struct {
-    void                *proto_ctx; /* Opaque blob for use by the protocol */
-    struct proto_handles handles;
-    tapsCallback         connectionReceived;
-    tapsCallback         establishmentError;
-    tapsCallback         stopped;
-    tapsCallback         closed; /* Listener only uses to init connection */
-    tapsCallback         connectionError; /* only for connection */
-    uint32_t             ref_count;
-    uint32_t             conn_limit;
-    struct event_base   *base;
-    int                  readyToStop;
-    int                  baseCreatedHere; /* Did the app provide the base? */
+    void                    *proto_ctx; /* Opaque blob used by the protocol */
+    void                    *app_ctx; /* Opaque blob used by the app */
+    struct proto_handles     handles; /* Location of protocol functions */
+    tapsCbConnectionReceived connectionReceived;
+    tapsCbEstablishmentError establishmentError;
+    tapsCbStopped            stopped;
+    uint32_t                 ref_count;
+    uint32_t                 conn_limit;
+    struct event_base       *base;
+    int                      readyToStop;
+    int                      baseCreatedHere; /* Did TAPS init the event_base?*/
 } tapsListener;
 
 static void *
 _taps_connection_received(void *taps_ctx, void *proto_ctx)
 {
     tapsListener   *l = taps_ctx;
-    TAPS_CTX       *conn;
+    tapsCallbacks  *callbacks;
+    TAPS_CTX       *c;
+    void           *app_ctx;
 
     TAPS_TRACE();
-    conn = tapsConnectionNew(proto_ctx, &l->handles, l, l->closed,
-            l->connectionError);
-    if (conn == NULL) {
+    c = tapsConnectionNew(proto_ctx, &l->handles, l);
+    if (!c) {
         printf("tapsConnectionNew failed\n");
         return NULL;
     }
     l->ref_count++;
-    (*(l->connectionReceived))(l, conn, sizeof(TAPS_CTX *));
-    return conn;
+    app_ctx = (*(l->connectionReceived))(l->app_ctx, c, (void **)&callbacks);
+    if (!callbacks || !callbacks->closed || !callbacks->connectionError) {
+        _taps_closed(c);
+        printf("connectionReceived callback did not return callbacks\n");
+        return NULL;
+    }
+    tapsConnectionInitialize(c, app_ctx, callbacks);
+    return c;
 }
 
 static void
 _taps_stopped(void *taps_ctx)
 {
     tapsListener *l = taps_ctx;
-    tapsCallback  stopped = l->stopped;
+    tapsCbStopped stopped = l->stopped;
 
     TAPS_TRACE();
-    if (!l->stopped) {
-        printf("We already stopped\n");
-        return; /* Can't stop twice! */
-    }
     l->readyToStop = TRUE;
     if (l->ref_count == 0) {
         l->stopped = NULL; /* Mark this as dead */
-        (*stopped)((TAPS_CTX *)taps_ctx, NULL, 0);
+        (*stopped)(l->app_ctx);
     }
 }
 
 TAPS_CTX *
-tapsListenerNew(char *libpath, struct sockaddr *addr, struct event_base *base,
-        tapsCallback connectionReceived, tapsCallback establishmentError,
-        tapsCallback closed, tapsCallback connectionError)
+tapsListenerNew(void *app_ctx, char *libpath, struct sockaddr *addr,
+        struct event_base *base, tapsCallbacks *callbacks)
 {
     tapsListener      *l;
 
@@ -128,6 +129,7 @@ tapsListenerNew(char *libpath, struct sockaddr *addr, struct event_base *base,
                 "event_base\n");
         goto fail;
     }
+    /* It would be good to get rid of doing the callbacks here */
     l->proto_ctx = (l->handles.listen)(l, l->base, addr,
             &_taps_connection_received, NULL,
             &_taps_closed, &_taps_connection_error);
@@ -137,10 +139,9 @@ tapsListenerNew(char *libpath, struct sockaddr *addr, struct event_base *base,
         /* XXX early failure */
     }
     l->conn_limit = UINT32_MAX;
-    l->connectionReceived = connectionReceived;
-    l->establishmentError = establishmentError;
-    l->closed = closed;
-    l->connectionError = connectionError;
+    l->connectionReceived = callbacks->connectionReceived;
+    l->establishmentError = callbacks->establishmentError;
+    l->app_ctx = app_ctx ? app_ctx : l;
     return l;
 fail:
     if (l) {
@@ -151,27 +152,31 @@ fail:
     return NULL;
 }
 
-void
-tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped)
+int
+tapsListenerStop(TAPS_CTX *listener, tapsCallbacks *callbacks)
 {
     tapsListener     *l = (tapsListener *)listener;
 
     TAPS_TRACE();
-    l->stopped = stopped;
+    if (!listener || !callbacks || !callbacks->stopped) {
+        errno = EINVAL;
+        return -1;
+    }
+    l->stopped = callbacks->stopped;
     (l->handles.stop)(l->proto_ctx, &_taps_stopped);
-    return;
+    return 0;
 }
 
 void
 tapsListenerDeref(TAPS_CTX *listener)
 {
     tapsListener *l = (tapsListener *)listener;
-    tapsCallback  stopped = l->stopped;
+    tapsCbStopped stopped = l->stopped;
 
     l->ref_count--;
     if (l->readyToStop && (l->ref_count == 0)) {
         l->stopped = NULL;
-        (*stopped)((TAPS_CTX *)listener, NULL, 0);
+        (*stopped)(l->app_ctx);
     }
 }
 
@@ -181,6 +186,12 @@ tapsListenerFree(TAPS_CTX *listener)
     tapsListener     *l = (tapsListener *)listener;
 
     TAPS_TRACE();
+    if (!l->readyToStop && !l->stopped) {
+        /* Early Free */
+        (l->handles.stop)(l->proto_ctx, &_taps_stopped);
+        l->readyToStop = TRUE;
+        return 0;
+    }
     if (l->stopped) {
         printf("Trying to free before stopping\n");
         return -1;

@@ -137,7 +137,7 @@ tapsPreconnectionNew(TAPS_CTX **localEndpoint, int numLocal,
         TAPS_CTX **remoteEndpoint, int numRemote,
         TAPS_CTX *transportProps, TAPS_CTX *securityProperties)
 {
-    tapsPreconnection   *newPreconn = NULL;
+    tapsPreconnection   *pc = NULL;
     tapsProtocol         proto[255];
     transportProperties *tp = (transportProperties *)transportProps;
     int                  numProtocols, i;
@@ -149,19 +149,19 @@ tapsPreconnectionNew(TAPS_CTX **localEndpoint, int numLocal,
         return NULL;
     }
 
-    newPreconn = malloc(sizeof(tapsPreconnection));
-    if (newPreconn == NULL) {
+    pc = malloc(sizeof(tapsPreconnection));
+    if (pc == NULL) {
         errno = ENOMEM;
         return NULL;
     }
-    memset(newPreconn, 0, sizeof(newPreconn));
-    memcpy(newPreconn->local, localEndpoint, sizeof(TAPS_CTX *) * numLocal);
-    memcpy(newPreconn->remote, remoteEndpoint, sizeof(TAPS_CTX *) * numRemote);
-    newPreconn->numLocal = numLocal;
-    newPreconn->numRemote = numRemote;
+    memset(pc, 0, sizeof(pc));
+    memcpy(pc->local, localEndpoint, sizeof(TAPS_CTX *) * numLocal);
+    memcpy(pc->remote, remoteEndpoint, sizeof(TAPS_CTX *) * numRemote);
+    pc->numLocal = numLocal;
+    pc->numRemote = numRemote;
 #if 0
     /* code for a deep copy. Aliases make it very hard */
-    epWrite = newPreconn->local;
+    epWrite = pc->local;
     for (i = 0; i < numLocal; i++) {
         epRead = ((*localEndpoint) + i);
         memcpy(epWrite, epRead, sizeof(tapsEndpoint));
@@ -182,25 +182,25 @@ tapsPreconnectionNew(TAPS_CTX **localEndpoint, int numLocal,
         if ((proto[i].properties.bitmask & tp->prohibit.bitmask) ||
                 ((proto[i].properties.bitmask & tp->require.bitmask) !=
                 tp->require.bitmask) ||
-                (newPreconn->numProtocols == TAPS_MAX_PROTOCOL_CANDIDATES)) {
+                (pc->numProtocols == TAPS_MAX_PROTOCOL_CANDIDATES)) {
             /* Fails requirements */
             free(proto[i].name);
             free(proto[i].protocol);
             free(proto[i].libpath);
             continue;
         }
-        memcpy(&newPreconn->protocol[newPreconn->numProtocols],
+        memcpy(&pc->protocol[pc->numProtocols],
                 &proto[i], sizeof(tapsProtocol));
-        newPreconn->numProtocols++;
+        pc->numProtocols++;
     }
-    if (newPreconn->numProtocols == 0) {
+    if (pc->numProtocols == 0) {
         errno = ENOPROTOOPT;
         goto fail;
     }
-    newPreconn->transport = tp;
-    return newPreconn;
+    pc->transport = tp;
+    return pc;
 fail:
-    tapsPreconnectionFree((TAPS_CTX *)newPreconn);
+    tapsPreconnectionFree((TAPS_CTX *)pc);
     return NULL;
 }
 
@@ -210,14 +210,15 @@ struct _node {
     LIST_ENTRY(struct _node);
 };
 
+#if 0
 /* XXX this code is out of date */
 int
 tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
         tapsCallback *error, int timeout)
 {
-    int                result = 0, i;
+    int                result = 0;
+    int                i;
     tapsPreconnection *pc = (tapsPreconnection *)preconn;
-//    tapsConnection    *c, *startc = NULL;
     tapsEndpoint      *ep;
     tapsPreference     pref;
     struct ifaddrs    *ifa;
@@ -287,20 +288,18 @@ tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
     }
     result = 1;
 fail:
-#if 0
     while (startc != NULL) {
         c = startc;
         startc = startc->nextCandidate;
         free(c);
     }
-#endif
     return result;
 }
+#endif
 
 TAPS_CTX *
-tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
-        tapsCallback connectionReceived, tapsCallback establishmentError,
-        tapsCallback closed, tapsCallback connectionError)
+tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
+        struct event_base *base, tapsCallbacks *callbacks)
 {
     int                 i;
     tapsPreconnection  *pc = (tapsPreconnection *)preconn;
@@ -310,9 +309,15 @@ tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
     struct sockaddr    *addr;
 
     TAPS_TRACE();
-    if (pc->numLocal < 1) {
+    if (!pc || (pc->numLocal < 1) || !callbacks ||
+            !callbacks->connectionReceived || !callbacks->establishmentError) {
         errno = EINVAL;
-        printf("No local endpoints\n");
+        printf("Missing preconnection arguments\n");
+        return NULL;
+    }
+    if (!base) {
+        errno = EINVAL;
+        printf("Base = NULL not yet supported\n"); /* XXX */
         return NULL;
     }
     for (i = 0; i < pc->numLocal; i++) {
@@ -340,8 +345,8 @@ tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
         sin.sin_port = htons(pc->local[0]->port);
         addr = (struct sockaddr *)&sin;
     }
-    l = tapsListenerNew(pc->protocol[0].libpath, addr, base, connectionReceived,
-            establishmentError, closed, connectionError);
+    l = tapsListenerNew(app_ctx, pc->protocol[0].libpath, addr, base,
+            callbacks);
     return l;
 }
 

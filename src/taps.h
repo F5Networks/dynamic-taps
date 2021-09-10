@@ -49,10 +49,66 @@
 #define TAPS_TRACE()
 #endif
 
+/* Opaque pointer for a TAPS object. Applications must hold these to call the
+   object. */
 typedef void TAPS_CTX;
 
-/* Function pointers for callbacks */
-typedef void (*tapsCallback)(TAPS_CTX *, void *, size_t);
+/*********** Function pointers for callbacks *************/
+/* For all of these, arg 1 is a pointer to the app's context for the calling
+   object */
+
+/* Listener callbacks */
+/* arg 2: the TAPS connection context, used for further calls.
+   arg 3: the app will return a pointer to a (tapsCallback *), with the
+      closed and connectionError fields filled in. TAPS will not write or free
+      this memory.
+   returns: the app's context for the connection, or NULL if it will just use
+   the TAPS context. */
+typedef void *(*tapsCbConnectionReceived)(void *, TAPS_CTX *, void **);
+/* arg 2: the reason string. Might be NULL */ 
+typedef void (*tapsCbEstablishmentError)(void *, char *);
+typedef void (*tapsCbStopped)(void *);
+
+/* Connection callbacks. */
+/* Arg 2: the application's message context */
+typedef void (*tapsCbSent)(void *, void *);
+/* Arg 2: the application's message context */
+typedef void (*tapsCbExpired)(void *, void *);
+/* Arg 2: the application's message context
+   Arg 3: Reason string. Might be NULL */
+typedef void (*tapsCbSendError)(void *, void *, char *);
+/* Arg 2: the application's message context
+   Arg 3: a TAPS context containing the message data.
+        Call tapsMessageFree when done*/
+typedef void (*tapsCbReceived)(void *, void *, TAPS_CTX *);
+/* Arg 2: the application's message context
+   Arg 3: a TAPS context containing the message data.
+        Call tapsMessageFree when done
+   Arg 4: end of message */
+typedef void (*tapsCbReceivedPartial)(void *, void *, TAPS_CTX *, int);
+/* Arg 2: the application's message context
+   Arg 3: Reason string. Might be NULL */
+typedef void (*tapsCbReceiveError)(void *, void *, char *);
+typedef void (*tapsCbClosed)(void *);
+/* Arg 2: Reason string. Might be NULL */
+typedef void (*tapsCbConnectionError)(void *, char *);
+
+/* Numerous functions take multiple callbacks; this is a convenience structure
+   for the app to hold its handlers for all events. A given TAPS function will
+   only look at some of these fields. */
+typedef struct {
+    tapsCbConnectionReceived connectionReceived;
+    tapsCbEstablishmentError establishmentError;
+    tapsCbStopped            stopped;
+    tapsCbSent               sent;
+    tapsCbExpired            expired;
+    tapsCbSendError          sendError;
+    tapsCbReceived           received;
+    tapsCbReceivedPartial    receivedPartial;
+    tapsCbReceiveError       receiveError;
+    tapsCbClosed             closed;
+    tapsCbConnectionError    connectionError;
+} tapsCallbacks;
 
 /* Connection properties (Sec 6) */
 typedef enum { TAPS_ESTABLISHING, TAPS_ESTABLISHED, TAPS_CLOSING, TAPS_CLOSED }
@@ -109,7 +165,7 @@ typedef void (*tapsHandler)(int fd, int error);
  * draft-ietf-taps-interface.
  */
 
-/* Endpoint functions. See Sec 4.1. */
+/* Endpoint functions. See Sec 6.1. */
 /* Create a new endpoint instance */
 TAPS_CTX *tapsEndpointNew();
 /* Attachment functions. All return 1 on success, and 0 on failure with errno
@@ -130,7 +186,7 @@ int tapsWithStunServer(TAPS_CTX *endp, char *addr, uint16_t port,
 /* Clean up the instance. */
 void tapsEndpointFree(TAPS_CTX *endp);
 
-/* Transport property functions. See Sec 4.2. */
+/* Transport property functions. See Sec 6.2. */
 typedef enum { TAPS_LISTENER, TAPS_INITIATE, TAPS_RENDEZVOUS }
     tapsConnectionType;
 typedef enum  { TAPS_REQUIRE = 2, TAPS_PREFER = 1, TAPS_IGNORE = 0,
@@ -170,13 +226,6 @@ int tapsTransportPropertiesSet(TAPS_CTX *tp, char *propertyName,
         tapsPreference preference);
 void tapsTransportPropertiesFree(TAPS_CTX *tp);
 
-/* Messages (Sec 9.1) */
-/* Create a message with a single buffer */
-TAPS_CTX *tapsMessageNew(void *data, size_t len);
-void *tapsMessageGetFirstBuf(TAPS_CTX *messgage, size_t *len);
-void tapsMessageFree(TAPS_CTX *message);
-
-
 /* "local" and "remote" point to an array of endpoints */
 /*
  * Warning! Calling tapsPreconnectionNew does not freeze the contents of the
@@ -213,22 +262,27 @@ int tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
 */
 
 #if 0
-/* Sec 5.1  Returns an fd for the connection */
+/* Sec 7.1  Returns an fd for the connection */
 int tapsInitiateWithSend(int preconnection, unsigned int timeoutSec,
         void *data, size_t data_len, tapsMessageContext *ctx,
         tapsCallback *ready, tapsCallback *error, tapsCallback *sent);
 #endif
 
-/* Sec 5.2 Returns an fd for the listener. The "received" callback will
- * reference  this fd and the "data" field will be a ptr to int with the fd of
- * the connection. */
-/* We need to include handlers for connection close and abort that will be
-   installed in connections that are returned with received(). */
-TAPS_CTX *tapsPreconnectionListen(TAPS_CTX *preconn, struct event_base *base,
-        tapsCallback connectionReceived, tapsCallback establishmentError,
-        tapsCallback closed, tapsCallback connectionError);
+/* Sec 7.2 Returns an fd for the listener.
+ * preconn: previously provided TAPS context for the preconnection.
+ * app_ctx: an application context for the listener. If NULL, the app is just
+   using the TAPS context, and will expect this pointer as the first argument
+   in callbacks.
+ * base: the libevent base. If NULL, TAPS will do its own event framework, which
+   reduces application complexity but also performance. NULL is not yet
+   implemented.
+ * callbacks: only the connectionReceived and establishmentError fields are
+   meaningful. Will fail if these are absent.
+ */
+TAPS_CTX *tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
+        struct event_base *base, tapsCallbacks *callbacks);
 void tapsPreconnectionFree(TAPS_CTX *pc);
-void tapsListenerStop(TAPS_CTX *listener, tapsCallback stopped);
+int tapsListenerStop(TAPS_CTX *listener, tapsCallbacks *callbacks);
 /* Warning: DO NOT call tapsListenerFree in the "stopped" callback function.
    The stopped callback function is likely called by the protocol
    implementation's own callback. tapsListenerFree will close the shared
@@ -264,26 +318,35 @@ void tapsGetProperty(int connection, char *propertyName, void *value);
 
 /* XXX TODO Messages and Framers (Sec 7.1) */
 #endif
+/* Messages (Sec 9.1) */
+/* Create a message with a single buffer */
+TAPS_CTX *tapsMessageNew(void *data, size_t len);
+void *tapsMessageGetFirstBuf(TAPS_CTX *message, size_t *len);
+void tapsMessageFree(TAPS_CTX *message);
 
-/* Sending (Sec 7.2) */
+
+/* Sending (Sec 9.2) */
 void tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg,
-        tapsCallback sent, tapsCallback expired, tapsCallback sendError);
+        tapsCallbacks *callbacks);
 #if 0
 void tapsStartBatch(int connection);
 void tapsEndBatch(int connection);
 #endif
 
-/* Receiving (Sec 7.3) */
-/*
- * maxLength is no more than the size of the buffer.
+/* Receiving (Sec 9.3) */
+/* Returns 0 on success, -1 on error.
+ * connection: TAPS context for the connection
+ * app_ctx: the context the app wants on callbacks for this receive
+ * buf: memory where the bytes should go
+ * minIncompleteLength: minimum bytes before calling back
+ * maxLength: must be no larger than buf
+ * callbacks: must populate received, receivedPartial, and receiveError.
  */
-void tapsConnectionReceive(TAPS_CTX *connection, void *buf,
-        size_t minIncompleteLength, size_t maxLength,
-        tapsCallback received, tapsCallback receivedPartial,
-        tapsCallback receiveError);
+int tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
+        size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks);
 
 #if 0
-/* Termination (Sec 8) */
+/* Termination (Sec 10) */
 void tapsClose(int connection, tapsCallback *closed, tapsCallback *error);
 void tapsAbort(int connection, tapsCallback *error);
 void tapsCloseGroup(int connection);
@@ -291,7 +354,8 @@ void tapsAbortGroup(int connection);
 #endif
 
 /* We could just free the connection on the closed event, but the application
-   might want to query metadata to free its state */
+   might want to query metadata to free its state. Also, we can't call
+   dlclose() in the callback stack without segfaulting. */
 void tapsConnectionFree(TAPS_CTX *connection);
 
 

@@ -202,13 +202,6 @@ typedef struct {
     tapsCallback  *trustCallback;
     tapsCallback  *challengeCallback;
 } taps_security_params;
-   oimeout: time (in milliseconds) to wait before giving up. */
-int tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
-        tapsCallback *error, int timeout);
-int tapsPreconnectionListen(TAPS_CTX *preconn, tapsCallback *received,
-        tapsCallback *error, tapsCallback *stopped);
-void tapsPreconnectionFree(TAPS_CTX *pc);
-
 
 /* Elements of the candidate tree */
 typedef struct {
@@ -245,13 +238,17 @@ struct proto_handles {
     receiveHandle     receive;
 };
 
-TAPS_CTX *tapsListenerNew(char *libpath, struct sockaddr *addr,
-        struct event_base *base,
-        tapsCallback connectionReceived, tapsCallback establishmentError,
-        tapsCallback closed, tapsCallback connectionError);
+/* Called from the preconnection */
+TAPS_CTX *tapsListenerNew(void *app_ctx, char *libpath, struct sockaddr *addr,
+        struct event_base *base, tapsCallbacks *callbacks);
+/* Connections call this; we can't send the Stopped event until all connections
+   are dead. */
 void tapsListenerDeref(TAPS_CTX *listener);
 
 void _taps_closed(void *taps_ctx);
 void _taps_connection_error(void *taps_ctx);
-TAPS_CTX *tapsConnectionNew();
+TAPS_CTX *tapsConnectionNew(void *proto_ctx, struct proto_handles *handles,
+        TAPS_CTX *listener);
+void tapsConnectionInitialize(TAPS_CTX *ctx, void *app_ctx,
+        tapsCallbacks *callbacks);
 #endif /* _TAPS_INTERNALS_H */
