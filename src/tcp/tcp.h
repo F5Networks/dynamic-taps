@@ -29,6 +29,6 @@ int Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
 void Stop(void *proto_ctx, StoppedCb cb);
 void Send(void *proto_ctx, void *taps_ctx, struct iovec *message, int iovcnt,
         SentCb sent, ExpiredCb expired, SendErrorCb sendError);
-void Receive(void *proto_ctx, void *taps_ctx, void *buf, size_t buf_size,
-        ReceivedCb received,
-        ReceivedPartialCb receivedPartial, ReceiveErrorCb receiveError);
+void Receive(void *proto_ctx, void *taps_ctx, struct iovec *message, int iovcnt,
+        ReceivedCb received, ReceivedPartialCb receivedPartial,
+       	ReceiveErrorCb receiveError);

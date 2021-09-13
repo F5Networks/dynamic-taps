@@ -27,7 +27,7 @@ typedef enum { TAPS_START, TAPS_HAVEADDR, TAPS_CONNECTING, TAPS_CONNECTED }
         tapsCandidateState;
 
 struct _send_item {
-    void                   *message;
+    TAPS_CTX               *message;
     TAPS_CTX               *connection;
     void                   *app_ctx;
     tapsCbSent              sent;
@@ -37,7 +37,7 @@ struct _send_item {
 };
 
 struct _recv_item {
-    void                   *data;
+    TAPS_CTX               *message;
     size_t                  minLength, maxLength, currLength;
     TAPS_CTX               *connection;
     void                   *app_ctx;
@@ -248,7 +248,7 @@ _taps_receive_error(TAPS_CTX *item_ctx)
 }
 
 static void
-_taps_received_partial(void *item_ctx, void *data, size_t data_len)
+_taps_received_partial(void *item_ctx, struct iovec *data, size_t data_len)
 {
     struct _recv_item     *item = item_ctx;
     struct _recv_item     *next_item;
@@ -258,28 +258,23 @@ _taps_received_partial(void *item_ctx, void *data, size_t data_len)
     TAPS_CTX              *msg;
     void                  *app_ctx;
     size_t                 len;
+    struct iovec          *iovec;
+    int                    iovcnt;
 
     item->currLength += data_len;
     /* Send it back if not enough length */
     if (item->currLength < item->minLength) {
-        (c->handles->receive)(c->proto_ctx, item,
-                item->data + item->currLength,
-                item->maxLength - item->currLength , &_taps_received,
+	iovec = tapsMessageGetIovec(item->message, &iovcnt);
+        (c->handles->receive)(c->proto_ctx, item, data, iovcnt,
+			// XXX this bit is broken: can't use offset
+		(off_t)item->currLength, &_taps_received,
                 &_taps_received_partial, &_taps_receive_error);
-        return;
-    }
-    msg = tapsMessageNew(item->data, item->currLength);
-    if (!msg) {
-        rcvError = item->receiveError;
-        app_ctx = item->app_ctx;
-        DELETE_ITEM(item, &(c->rcvq));
-        (rcvError)(c->app_ctx, app_ctx, "Message Malloc failed");
         return;
     }
     if (item->next) {
         /* Queue up the next receive */
-        (c->handles->receive)(c->proto_ctx, item->next, item->next->data,
-                item->next->maxLength,
+	iovec = tapsMessageGetIovec(item->next->message, &iovcnt);
+        (c->handles->receive)(c->proto_ctx, item->next, iovec, iovcnt,
                 &_taps_received, &_taps_received_partial, &_taps_receive_error);
     } else {
         /* Nothing else to do */
@@ -287,15 +282,18 @@ _taps_received_partial(void *item_ctx, void *data, size_t data_len)
     }
     rcvPart = item->receivedPartial;
     app_ctx = item->app_ctx;
+    msg = item->message;
     DELETE_ITEM(item, &(c->rcvq));
     (rcvPart)(c->app_ctx, app_ctx, msg, FALSE);
 }
 
 int
-tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
-        size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks)
+tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, TAPS_CTX *msg,
+	size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks)
 {
     tapsConnection *c = (tapsConnection *)connection;
+    struct iovec   *iovec;
+    int             iovcnt;
 
     TAPS_TRACE();
     if (!callbacks || !callbacks->received || !callbacks->receivedPartial ||
@@ -308,7 +306,7 @@ tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
     newItem->received = callbacks->received;
     newItem->receivedPartial = callbacks->receivedPartial;
     newItem->receiveError = callbacks->receiveError;
-    newItem->data = buf;
+    newItem->message = msg;
     newItem->minLength = minIncompleteLength;
     newItem->maxLength = maxLength;
     newItem->currLength = 0;
@@ -317,8 +315,10 @@ tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
 
     if (c->receiveReady) {
         c->receiveReady = FALSE;
-        (c->handles->receive)(c->proto_ctx, newItem, newItem->data, maxLength,
-                &_taps_received, &_taps_received_partial, &_taps_receive_error);
+        iovec = tapsMessageGetIovec(msg, &iovcnt);
+        (c->handles->receive)(c->proto_ctx, newItem, iovec, iovcnt,
+		&_taps_received, &_taps_received_partial,
+	       	&_taps_receive_error);
     }
     return 0;
 }

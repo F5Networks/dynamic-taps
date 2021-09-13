@@ -38,7 +38,7 @@ typedef void (*SentCb)(void *);
 typedef void (*ExpiredCb)(void *);
 typedef void (*SendErrorCb)(void *);
 typedef void (*ReceivedCb)(void *, void *, size_t);
-typedef void (*ReceivedPartialCb)(void *, void *, size_t);
+typedef void (*ReceivedPartialCb)(void *, struct iovec *, size_t);
 typedef void (*ReceiveErrorCb)(void *); /* XXX add reason? */
 typedef void (*ClosedCb)(void *); /* Connection Closed */
 typedef void (*ConnectionErrorCb)(void *);
@@ -71,5 +71,5 @@ typedef void (*sendHandle)(void *, void *, struct iovec *, int, SentCb,
         ExpiredCb, SendErrorCb);
 /* Must be named "Receive" */;
 /* args: proto context, callbacks */
-typedef void (*receiveHandle)(void *, void *, void *, size_t,
+typedef void (*receiveHandle)(void *, void *, struct iovec *, int,
         ReceivedCb, ReceivedPartialCb, ReceiveErrorCb);

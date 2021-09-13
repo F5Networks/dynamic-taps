@@ -118,7 +118,8 @@ _app_received_partial(void *conn, void *msg, TAPS_CTX *data, int eom)
         printf("malloc failed, not receiving anymore\n");
         exit(-1);
     }
-    tapsConnectionReceive(c->taps, m, m->buf, 0, BUF_SIZE, &c->l->callbacks);
+    m->taps = tapsMessageNew(m->buf, BUF_SIZE);
+    tapsConnectionReceive(c->taps, m, m->taps, 0, BUF_SIZE, &c->l->callbacks);
 }
 
 static void
@@ -171,7 +172,8 @@ _app_connection_received(void *listener, TAPS_CTX *conn, void **cb)
         printf("malloc failed, not receiving anymore\n");
         exit(-1);
     }
-    tapsConnectionReceive(c->taps, m, m->buf, 0, BUF_SIZE, &c->l->callbacks);
+    m->taps = tapsMessageNew(m->buf, BUF_SIZE);
+    tapsConnectionReceive(c->taps, m, m->taps, 0, BUF_SIZE, &c->l->callbacks);
     return c;
 }
 

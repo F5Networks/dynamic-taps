@@ -322,7 +322,7 @@ void tapsEndBatch(int connection);
  * maxLength: must be no larger than buf
  * callbacks: must populate received, receivedPartial, and receiveError.
  */
-int tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
+int tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, TAPS_CTX *msg,
         size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks);
 
 #if 0

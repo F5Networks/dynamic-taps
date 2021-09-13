@@ -89,8 +89,8 @@ struct conn_ctx {
     void               *taps_ctx;
     void               *send_ctx;
     void               *receive_ctx;
-    void               *receive_buffer;
-    size_t              receive_buffer_size;
+    struct iovec       *receive_buffer;
+    int                 iovcnt;
 };
 
 struct listener_ctx {
@@ -134,12 +134,13 @@ _tcp_received(evutil_socket_t sock, short event, void *arg)
     ssize_t bytes;
     struct conn_ctx *c = arg;
 
-    bytes = read(c->fd, c->receive_buffer, c->receive_buffer_size);
-    printf("read %lu bytes\n", bytes);
+    bytes = readv(c->fd, c->receive_buffer, c->iovcnt);
     if (bytes < 0) {
+	printf("preadv failed, %s\n", strerror(errno));
         /* XXX Call receiveError */
         return;
     }
+    printf("read %lu bytes\n", bytes);
     if (bytes == 0) {
         return;
     }
@@ -287,13 +288,11 @@ Send(void *proto_ctx, void *taps_ctx, struct iovec *message, int iovcnt,
 }
 
 int
-Receive(void *proto_ctx, void *taps_ctx, void *buf, size_t buf_size,
+Receive(void *proto_ctx, void *taps_ctx, struct iovec *iovec, int iovcnt,
         ReceivedCb received, ReceivedPartialCb receivedPartial,
         ReceiveErrorCb receiveError)
 {
     struct conn_ctx    *c = proto_ctx;
-    struct iovec       *iovec;
-    int                 iov_len;
     ssize_t             retval;
 
     if (!c->received) {
@@ -306,10 +305,10 @@ Receive(void *proto_ctx, void *taps_ctx, void *buf, size_t buf_size,
         return -1;
     }
     c->receive_ctx = taps_ctx;
+    c->receive_buffer = iovec;
+    c->iovcnt = iovcnt;
     if (event_add(c->receiveEvent, NULL) < 0) { /* XXX Add timeouts */
         return -1;;
     }
-    c->receive_buffer = buf;
-    c->receive_buffer_size = buf_size;
     return 0;
 }
