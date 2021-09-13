@@ -38,7 +38,7 @@ kernel.yaml and the Makefile accordingly.
 
 ## Architecture
 
-Coming soon.
+See documents in the docs/ folder.
 
 ## References
 The interface between applications and TAPS is specified in documents available

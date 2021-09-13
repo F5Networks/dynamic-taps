@@ -127,34 +127,6 @@ typedef enum { TAPS_HANDOVER, TAPS_INTERACTIVE_MP, TAPS_AGGREGATE }
 
 /* Returns the final length of out */
 typedef size_t (*tapsFramer)(void *in, void *out, size_t in_len);
-
-typedef struct {
-    tapsFramer             *sendFramer, *recvFramer;
-    tapsEndpoint           *remoteEndpoint, *localEndpoint;
-    unsigned int            msgLifetime; /* 0 = infinite */
-    unsigned int            msgPrio;
-    bool                    msgOrdered;
-    bool                    safelyReplayable;
-    bool                    final;
-    int                     msgChecksumLen; /* -1 = full coverage */
-    bool                    msgReliable;
-    tapsCapacity            msgCapacityProfile;
-    bool                    noFragmentation, noSegmentation;
-} tapsMessageContext;
-
-static const tapsMessageContext tapsMessageDefault = {
-    .sendFramer            = NULL,
-    .recvFramer            = NULL,
-    .msgLifetime           = 0,
-    .msgPrio               = 100,
-    /* Skip msgOrdered */
-    .safelyReplayable      = false,
-    .final                 = false,
-    .msgChecksumLen        = -1,
-    /* Skip msgReliable, msgCapacityProfile */
-    .noFragmentation       = false,
-    .noSegmentation        = false,
-};
 #endif
 
 /* Most taps functions require the caller to provide a callback */
@@ -282,6 +254,11 @@ int tapsInitiateWithSend(int preconnection, unsigned int timeoutSec,
 TAPS_CTX *tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
         struct event_base *base, tapsCallbacks *callbacks);
 void tapsPreconnectionFree(TAPS_CTX *pc);
+/* tapsListenerStop will stop allowing new connections immediately, but it does
+ * not actually return the Stopped<> event until all connections spawned by
+ * that listener have closed. This allows children of a listener to share an
+ * event_base and other data structures, which should improve the scalability
+ * of servers. */
 int tapsListenerStop(TAPS_CTX *listener, tapsCallbacks *callbacks);
 /* Warning: DO NOT call tapsListenerFree in the "stopped" callback function.
    The stopped callback function is likely called by the protocol
@@ -323,6 +300,8 @@ void tapsGetProperty(int connection, char *propertyName, void *value);
 TAPS_CTX *tapsMessageNew(void *data, size_t len);
 void *tapsMessageGetFirstBuf(TAPS_CTX *message, size_t *len);
 struct iovec *tapsMessageGetIovec(TAPS_CTX *message, int *iovcnt);
+/* If the message was sent via Send or Receive, DO NOT call Free() until
+ * one of the send or receive events for that message has returned */
 void tapsMessageFree(TAPS_CTX *message);
 
 

@@ -23,6 +23,36 @@
 #include <sys/uio.h>
 #include "taps.h"
 
+#if 0
+typedef struct {
+    tapsFramer             *sendFramer, *recvFramer;
+    tapsEndpoint           *remoteEndpoint, *localEndpoint;
+    unsigned int            msgLifetime; /* 0 = infinite */
+    unsigned int            msgPrio;
+    bool                    msgOrdered;
+    bool                    safelyReplayable;
+    bool                    final;
+    int                     msgChecksumLen; /* -1 = full coverage */
+    bool                    msgReliable;
+    tapsCapacity            msgCapacityProfile;
+    bool                    noFragmentation, noSegmentation;
+} tapsMessageContext;
+
+static const tapsMessageContext tapsMessageDefault = {
+    .sendFramer            = NULL,
+    .recvFramer            = NULL,
+    .msgLifetime           = 0,
+    .msgPrio               = 100,
+    /* Skip msgOrdered */
+    .safelyReplayable      = false,
+    .final                 = false,
+    .msgChecksumLen        = -1,
+    /* Skip msgReliable, msgCapacityProfile */
+    .noFragmentation       = false,
+    .noSegmentation        = false,
+};
+#endif
+
 typedef struct {
 } tapsMessageProperties;
 
