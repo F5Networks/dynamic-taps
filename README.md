@@ -16,6 +16,8 @@ Discovery" -- a means for TAPS to identify the protocol implementations availabl
 provided they meet user-specified trust criteria.
 
 ## Getting Started
+There are a number of packages you need for this: gcc, make, libyaml-dev, libevent
+libevent-dev.
 
 ```sh
 $ git clone https://github.com/f5networks/dynamic-taps.git
