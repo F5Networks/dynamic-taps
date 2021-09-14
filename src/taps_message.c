@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
-#include "taps.h"
+#include "taps_internals.h"
 
 #if 0
 typedef struct {
@@ -97,7 +97,7 @@ tapsMessageGetIovec(TAPS_CTX *message, int *iovcnt)
 {
     tapsMessage *m = (tapsMessage *)message;
 
-    *iovcnt = m->iovcnt;
+    if (iovcnt) *iovcnt = m->iovcnt;
     return (m->list ? m->list : &(m->buf));
 }
 

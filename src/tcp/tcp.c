@@ -109,6 +109,7 @@ _tcp_closed(evutil_socket_t sock, short event, void *arg)
 {
     struct conn_ctx *cctx = arg;
 
+    TAPS_TRACE();
     event_del(cctx->closeEvent);
     event_free(cctx->closeEvent);
     event_del(cctx->sendEvent);
@@ -125,6 +126,7 @@ _tcp_sent(evutil_socket_t sock, short event, void *arg)
 {
     struct conn_ctx *c = arg;
 
+    TAPS_TRACE();
     (c->sent)(c->send_ctx);
 }
 
@@ -134,9 +136,10 @@ _tcp_received(evutil_socket_t sock, short event, void *arg)
     ssize_t bytes;
     struct conn_ctx *c = arg;
 
+    TAPS_TRACE();
     bytes = readv(c->fd, c->receive_buffer, c->iovcnt);
     if (bytes < 0) {
-	printf("preadv failed, %s\n", strerror(errno));
+        printf("readv failed, %s\n", strerror(errno));
         /* XXX Call receiveError */
         return;
     }
@@ -155,7 +158,7 @@ _tcp_connection_received(evutil_socket_t listener, short event, void *arg)
     socklen_t                slen = sizeof(ss);
     struct conn_ctx         *cctx;
 
-    //TAPS_TRACE();
+    TAPS_TRACE();
     cctx = malloc(sizeof(struct conn_ctx));
     if (!cctx) goto fail;
     cctx->fd = accept(listener, (struct sockaddr *)&ss, &slen);
@@ -198,7 +201,7 @@ Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
     size_t               addr_size = (local->sa_family == AF_INET) ?
             sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
 
-    //TAPS_TRACE();
+    TAPS_TRACE();
     listener = malloc(sizeof(struct listener_ctx));
     if (!listener) return NULL;
     listener->base = base;
@@ -250,7 +253,7 @@ Stop(void *proto_ctx, StoppedCb cb)
     struct listener_ctx *ctx = proto_ctx;
     void  *taps_ctx = ctx->taps_ctx;
 
-    //TAPS_TRACE();
+    TAPS_TRACE();
     event_del(ctx->event);
     event_free(ctx->event);
     close(ctx->fd);
@@ -266,6 +269,7 @@ Send(void *proto_ctx, void *taps_ctx, struct iovec *message, int iovcnt,
     struct conn_ctx    *c = proto_ctx;
     ssize_t             retval;
 
+    TAPS_TRACE();
     if (!c->sent) {
         c->sent = sent;
         c->expired = expired;
@@ -295,6 +299,7 @@ Receive(void *proto_ctx, void *taps_ctx, struct iovec *iovec, int iovcnt,
     struct conn_ctx    *c = proto_ctx;
     ssize_t             retval;
 
+    TAPS_TRACE();
     if (!c->received) {
         c->received = received;
         c->receivedPartial = receivedPartial;

@@ -41,14 +41,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define TAPS_DEBUG
-
-#ifdef TAPS_DEBUG
-#define TAPS_TRACE() printf("Function %s: %s\n", __FILE__, __FUNCTION__);
-#else
-#define TAPS_TRACE()
-#endif
-
 /* Opaque pointer for a TAPS object. Applications must hold these to call the
    object. */
 typedef void TAPS_CTX;
@@ -77,15 +69,12 @@ typedef void (*tapsCbExpired)(void *, void *);
 /* Arg 2: the application's message context
    Arg 3: Reason string. Might be NULL */
 typedef void (*tapsCbSendError)(void *, void *, char *);
+/* Arg 2: the application's message context. This should include the TAPS
+   message object, which should be freed when done */
+typedef void (*tapsCbReceived)(void *, void *);
 /* Arg 2: the application's message context
-   Arg 3: a TAPS context containing the message data.
-        Call tapsMessageFree when done*/
-typedef void (*tapsCbReceived)(void *, void *, TAPS_CTX *);
-/* Arg 2: the application's message context
-   Arg 3: a TAPS context containing the message data.
-        Call tapsMessageFree when done
    Arg 4: end of message */
-typedef void (*tapsCbReceivedPartial)(void *, void *, TAPS_CTX *, int);
+typedef void (*tapsCbReceivedPartial)(void *, void *, int);
 /* Arg 2: the application's message context
    Arg 3: Reason string. Might be NULL */
 typedef void (*tapsCbReceiveError)(void *, void *, char *);
