@@ -89,8 +89,8 @@ struct conn_ctx {
     void               *taps_ctx;
     void               *send_ctx;
     void               *receive_ctx;
-    void               *receive_buffer;
-    size_t              receive_buffer_size;
+    struct iovec       *receive_buffer;
+    int                 iovcnt;
 };
 
 struct listener_ctx {
@@ -109,6 +109,7 @@ _tcp_closed(evutil_socket_t sock, short event, void *arg)
 {
     struct conn_ctx *cctx = arg;
 
+    TAPS_TRACE();
     event_del(cctx->closeEvent);
     event_free(cctx->closeEvent);
     event_del(cctx->sendEvent);
@@ -125,6 +126,7 @@ _tcp_sent(evutil_socket_t sock, short event, void *arg)
 {
     struct conn_ctx *c = arg;
 
+    TAPS_TRACE();
     (c->sent)(c->send_ctx);
 }
 
@@ -134,12 +136,14 @@ _tcp_received(evutil_socket_t sock, short event, void *arg)
     ssize_t bytes;
     struct conn_ctx *c = arg;
 
-    bytes = read(c->fd, c->receive_buffer, c->receive_buffer_size);
-    printf("read %lu bytes\n", bytes);
+    TAPS_TRACE();
+    bytes = readv(c->fd, c->receive_buffer, c->iovcnt);
     if (bytes < 0) {
+        printf("readv failed, %s\n", strerror(errno));
         /* XXX Call receiveError */
         return;
     }
+    printf("read %lu bytes\n", bytes);
     if (bytes == 0) {
         return;
     }
@@ -154,7 +158,7 @@ _tcp_connection_received(evutil_socket_t listener, short event, void *arg)
     socklen_t                slen = sizeof(ss);
     struct conn_ctx         *cctx;
 
-    //TAPS_TRACE();
+    TAPS_TRACE();
     cctx = malloc(sizeof(struct conn_ctx));
     if (!cctx) goto fail;
     cctx->fd = accept(listener, (struct sockaddr *)&ss, &slen);
@@ -197,7 +201,7 @@ Listen(void *taps_ctx, struct event_base *base, struct sockaddr *local,
     size_t               addr_size = (local->sa_family == AF_INET) ?
             sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
 
-    //TAPS_TRACE();
+    TAPS_TRACE();
     listener = malloc(sizeof(struct listener_ctx));
     if (!listener) return NULL;
     listener->base = base;
@@ -249,7 +253,7 @@ Stop(void *proto_ctx, StoppedCb cb)
     struct listener_ctx *ctx = proto_ctx;
     void  *taps_ctx = ctx->taps_ctx;
 
-    //TAPS_TRACE();
+    TAPS_TRACE();
     event_del(ctx->event);
     event_free(ctx->event);
     close(ctx->fd);
@@ -265,6 +269,7 @@ Send(void *proto_ctx, void *taps_ctx, struct iovec *message, int iovcnt,
     struct conn_ctx    *c = proto_ctx;
     ssize_t             retval;
 
+    TAPS_TRACE();
     if (!c->sent) {
         c->sent = sent;
         c->expired = expired;
@@ -287,15 +292,14 @@ Send(void *proto_ctx, void *taps_ctx, struct iovec *message, int iovcnt,
 }
 
 int
-Receive(void *proto_ctx, void *taps_ctx, void *buf, size_t buf_size,
+Receive(void *proto_ctx, void *taps_ctx, struct iovec *iovec, int iovcnt,
         ReceivedCb received, ReceivedPartialCb receivedPartial,
         ReceiveErrorCb receiveError)
 {
     struct conn_ctx    *c = proto_ctx;
-    struct iovec       *iovec;
-    int                 iov_len;
     ssize_t             retval;
 
+    TAPS_TRACE();
     if (!c->received) {
         c->received = received;
         c->receivedPartial = receivedPartial;
@@ -306,10 +310,10 @@ Receive(void *proto_ctx, void *taps_ctx, void *buf, size_t buf_size,
         return -1;
     }
     c->receive_ctx = taps_ctx;
+    c->receive_buffer = iovec;
+    c->iovcnt = iovcnt;
     if (event_add(c->receiveEvent, NULL) < 0) { /* XXX Add timeouts */
         return -1;;
     }
-    c->receive_buffer = buf;
-    c->receive_buffer_size = buf_size;
     return 0;
 }

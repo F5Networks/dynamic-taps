@@ -23,6 +23,7 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include "taps.h"
+#include "taps_debug.h"
 #include "taps_protocol.h"
 
 #ifndef _TAPS_INTERNALS_H

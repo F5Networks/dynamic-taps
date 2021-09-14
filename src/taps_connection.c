@@ -27,7 +27,7 @@ typedef enum { TAPS_START, TAPS_HAVEADDR, TAPS_CONNECTING, TAPS_CONNECTED }
         tapsCandidateState;
 
 struct _send_item {
-    void                   *message;
+    TAPS_CTX               *message;
     TAPS_CTX               *connection;
     void                   *app_ctx;
     tapsCbSent              sent;
@@ -37,7 +37,7 @@ struct _send_item {
 };
 
 struct _recv_item {
-    void                   *data;
+    TAPS_CTX               *message;
     size_t                  minLength, maxLength, currLength;
     TAPS_CTX               *connection;
     void                   *app_ctx;
@@ -149,22 +149,22 @@ tapsConnectionInitialize(TAPS_CTX *conn, void *app_ctx,
 
 void _taps_sent(void *item_ctx);
 void _taps_expired(void *item_ctx);
-void _taps_send_error(void *item_ctx);
+void _taps_send_error(void *item_ctx, char *reason);
 
-static void
+static int
 _taps_send_common(tapsConnection *c, struct _send_item *item)
 {
     struct _send_item *next = item->next;
     struct iovec *data;
     int           iovcnt;
 
-    data = tapsMessageGetIovec(item->message, &iovcnt);
     DELETE_ITEM(item, &(c->sndq));
     if (!next) {
         c->sendReady = TRUE;
-        return;
+        return 0;
     }
-    (c->handles->send)(c->proto_ctx, item, data, iovcnt, &_taps_sent,
+    data = tapsMessageGetIovec(next->message, &iovcnt);
+    return (c->handles->send)(c->proto_ctx, next, data, iovcnt, &_taps_sent,
             &_taps_expired, &_taps_send_error);
 }
 
@@ -177,7 +177,9 @@ _taps_sent(void *item_ctx)
     void              *app = item->app_ctx;
 
     TAPS_TRACE();
-    _taps_send_common(c, item);
+    if (_taps_send_common(c, item) < 0) {
+        printf("send failed\n");
+    }
     (cb)(c->app_ctx, app);
 }
 
@@ -190,12 +192,14 @@ _taps_expired(void *item_ctx)
     void              *app = item->app_ctx;
 
     TAPS_TRACE();
-    _taps_send_common(c, item);
+    if (_taps_send_common(c, item) < 0) {
+        printf("send failed\n");
+    }
     (cb)(c->app_ctx, app);
 }
 
 void
-_taps_send_error(void *item_ctx)
+_taps_send_error(void *item_ctx, char *reason)
 {
     struct _send_item *item = item_ctx;
     tapsConnection    *c = item->connection;
@@ -203,8 +207,10 @@ _taps_send_error(void *item_ctx)
     void              *app = item->app_ctx;
 
     TAPS_TRACE();
-    _taps_send_common(c, item);
-    (cb)(c->app_ctx, app, "Protocol failure");
+    if (_taps_send_common(c, item) < 0) {
+        printf("send failed\n");
+    }
+    (cb)(c->app_ctx, app, (reason) ? reason : "Protocol failure");
 }
 
 int
@@ -230,56 +236,118 @@ tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg, void *app_ctx,
 
     if (c->sendReady) {
         data = tapsMessageGetIovec(msg, &iovlen);
-        (c->handles->send)(c->proto_ctx, newItem, data, iovlen, &_taps_sent,
-                &_taps_expired, &_taps_send_error);
+        return (c->handles->send)(c->proto_ctx, newItem, data, iovlen,
+                &_taps_sent, &_taps_expired, &_taps_send_error);
     }
     return 0;
 }
 
-static void
-_taps_received(void *item_ctx, void *data, size_t data_len)
+/* Creates a new iovec to points to the same buffers as the original, but
+   leaving off the first len bytes. */
+static struct iovec *
+_taps_trunc_iovec(struct iovec *orig, int *iovcnt, size_t len)
 {
+    size_t        remaining = len;
+    struct iovec *ptr = orig;
+    struct iovec *newVec;
+
+    while ((remaining > ptr->iov_len) && (iovcnt > 0)) {
+        (*iovcnt)--;
+        remaining -= ptr->iov_len;
+        ptr++;
+    }
+    if (iovcnt == 0) {
+        printf("Iovec not big enough to truncate!\n");
+        return NULL;
+    }
+    newVec = malloc(sizeof(struct iovec) * (*iovcnt));
+    if (!newVec) {
+        return newVec;
+    }
+    memcpy(newVec, ptr, sizeof(struct iovec) * (*iovcnt));
+    newVec->iov_base += remaining;
+    newVec->iov_len -= remaining;
+    return newVec;
 }
 
 static void
-_taps_receive_error(TAPS_CTX *item_ctx)
+_taps_receive_error(TAPS_CTX *item_ctx, struct iovec *data, char *reason)
 {
+    struct _recv_item     *item = item_ctx;
+    struct iovec          *iovec = tapsMessageGetIovec(item->message, NULL);
+    tapsCbReceiveError     fn = item->receiveError;
+    tapsConnection        *c = item->connection;
+    TAPS_CTX              *conn_ctx = c->app_ctx;
+    TAPS_CTX              *item_app = item->app_ctx;
 
+    if (iovec != data) {
+        free(data);
+    }
+    DELETE_ITEM(item, &(c->rcvq));
+    (fn)(conn_ctx, item_app, reason);
 }
 
 static void
-_taps_received_partial(void *item_ctx, void *data, size_t data_len)
+_taps_received(void *item_ctx, struct iovec *data, size_t data_len)
+{
+    struct _recv_item     *item = item_ctx;
+    struct iovec          *iovec = tapsMessageGetIovec(item->message, NULL);
+    tapsCbReceived         fn = item->received;
+    tapsConnection        *c = item->connection;
+    TAPS_CTX              *conn_ctx = c->app_ctx;
+    TAPS_CTX              *item_app = item->app_ctx;
+    TAPS_CTX              *msg = item->message;
+
+    if (iovec != data) {
+        free(data);
+    }
+    item->currLength += data_len;
+    if (item->currLength < item->minLength) {
+        /* If the message size is < minLength, it is an error */
+        _taps_receive_error(item_ctx, iovec, "Message below minLength");
+        return;
+    }
+    DELETE_ITEM(item, &(c->rcvq));
+    (fn)(conn_ctx, item_app, item->currLength);
+}
+
+static void
+_taps_received_partial(void *item_ctx, struct iovec *data, size_t data_len)
 {
     struct _recv_item     *item = item_ctx;
     struct _recv_item     *next_item;
     tapsConnection        *c = item->connection;
-    tapsCbReceiveError     rcvError;
     tapsCbReceivedPartial  rcvPart;
     TAPS_CTX              *msg;
     void                  *app_ctx;
     size_t                 len;
+    struct iovec          *iovec, *newIovec;
+    int                    iovcnt;
 
-    item->currLength += data_len;
-    /* Send it back if not enough length */
-    if (item->currLength < item->minLength) {
-        (c->handles->receive)(c->proto_ctx, item,
-                item->data + item->currLength,
-                item->maxLength - item->currLength , &_taps_received,
-                &_taps_received_partial, &_taps_receive_error);
-        return;
+    iovec = tapsMessageGetIovec(item->message, &iovcnt);
+    /* Handle returns below minLength. Unfortunately, the SO_RCVLOWAT socket
+       option doesn't work with select() and poll(), which in turn are wrapped
+       by libevent. So we have to handle this manually.
+
+       We have to manually hack the iovec to make this work.*/
+    if (iovec != data) {
+        free(data);
     }
-    msg = tapsMessageNew(item->data, item->currLength);
-    if (!msg) {
-        rcvError = item->receiveError;
-        app_ctx = item->app_ctx;
-        DELETE_ITEM(item, &(c->rcvq));
-        (rcvError)(c->app_ctx, app_ctx, "Message Malloc failed");
+    item->currLength += data_len;
+    if (item->currLength < item->minLength) {
+        newIovec = _taps_trunc_iovec(iovec, &iovcnt, item->currLength);
+        if (!newIovec) {
+            _taps_receive_error(item_ctx, iovec, "Internal error");
+            return;
+        }
+        (c->handles->receive)(c->proto_ctx, item, newIovec, iovcnt,
+                &_taps_received, &_taps_received_partial, &_taps_receive_error);
         return;
     }
     if (item->next) {
         /* Queue up the next receive */
-        (c->handles->receive)(c->proto_ctx, item->next, item->next->data,
-                item->next->maxLength,
+        iovec = tapsMessageGetIovec(item->next->message, &iovcnt);
+        (c->handles->receive)(c->proto_ctx, item->next, iovec, iovcnt,
                 &_taps_received, &_taps_received_partial, &_taps_receive_error);
     } else {
         /* Nothing else to do */
@@ -287,15 +355,18 @@ _taps_received_partial(void *item_ctx, void *data, size_t data_len)
     }
     rcvPart = item->receivedPartial;
     app_ctx = item->app_ctx;
+    msg = item->message;
     DELETE_ITEM(item, &(c->rcvq));
-    (rcvPart)(c->app_ctx, app_ctx, msg, FALSE);
+    (rcvPart)(c->app_ctx, app_ctx, item->currLength, FALSE);
 }
 
 int
-tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
-        size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks)
+tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, TAPS_CTX *msg,
+    size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks)
 {
     tapsConnection *c = (tapsConnection *)connection;
+    struct iovec   *iovec;
+    int             iovcnt;
 
     TAPS_TRACE();
     if (!callbacks || !callbacks->received || !callbacks->receivedPartial ||
@@ -308,7 +379,7 @@ tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
     newItem->received = callbacks->received;
     newItem->receivedPartial = callbacks->receivedPartial;
     newItem->receiveError = callbacks->receiveError;
-    newItem->data = buf;
+    newItem->message = msg;
     newItem->minLength = minIncompleteLength;
     newItem->maxLength = maxLength;
     newItem->currLength = 0;
@@ -317,8 +388,10 @@ tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
 
     if (c->receiveReady) {
         c->receiveReady = FALSE;
-        (c->handles->receive)(c->proto_ctx, newItem, newItem->data, maxLength,
-                &_taps_received, &_taps_received_partial, &_taps_receive_error);
+        iovec = tapsMessageGetIovec(msg, &iovcnt);
+        (c->handles->receive)(c->proto_ctx, newItem, iovec, iovcnt,
+        &_taps_received, &_taps_received_partial,
+               &_taps_receive_error);
     }
     return 0;
 }

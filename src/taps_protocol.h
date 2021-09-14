@@ -24,6 +24,7 @@
 #include <event2/event.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
+#include "taps_debug.h"
 
 /* Callbacks, from the protocols to TAPS, for various events */
 /* The first void is the TAPS context for the component that throws the event.
@@ -31,17 +32,17 @@
 /* The second void * is the new, opaque protocol connection context for the
    protocol. It returns the taps context */
 typedef void *(*ConnectionReceivedCb)(void *, void *);
-typedef void (*EstablishmentErrorCb)(void *); /* XXX add reason code or errno */
+typedef void (*EstablishmentErrorCb)(void *, char *);
 typedef void (*StoppedCb)(void *);
 /* Connection Context */
 typedef void (*SentCb)(void *);
 typedef void (*ExpiredCb)(void *);
-typedef void (*SendErrorCb)(void *);
-typedef void (*ReceivedCb)(void *, void *, size_t);
-typedef void (*ReceivedPartialCb)(void *, void *, size_t);
-typedef void (*ReceiveErrorCb)(void *); /* XXX add reason? */
+typedef void (*SendErrorCb)(void *, char *);
+typedef void (*ReceivedCb)(void *, struct iovec *, size_t);
+typedef void (*ReceivedPartialCb)(void *, struct iovec *, size_t);
+typedef void (*ReceiveErrorCb)(void *, struct iovec *, char *);
 typedef void (*ClosedCb)(void *); /* Connection Closed */
-typedef void (*ConnectionErrorCb)(void *);
+typedef void (*ConnectionErrorCb)(void *, char *);
 
 /* There must be a function "Listen" with the following arguments:
    * void *: an opaque pointer the protocol must return?$
@@ -67,9 +68,9 @@ typedef void *(*listenHandle)(void *, struct event_base *, struct sockaddr *,
 typedef void (*stopHandle)(void *, StoppedCb);
 /* Must be named "Send" */
 /* args: proto context, taps context, data, iovcnt; then callbacks */
-typedef void (*sendHandle)(void *, void *, struct iovec *, int, SentCb,
+typedef int (*sendHandle)(void *, void *, struct iovec *, int, SentCb,
         ExpiredCb, SendErrorCb);
 /* Must be named "Receive" */;
 /* args: proto context, callbacks */
-typedef void (*receiveHandle)(void *, void *, void *, size_t,
+typedef void (*receiveHandle)(void *, void *, struct iovec *, int,
         ReceivedCb, ReceivedPartialCb, ReceiveErrorCb);

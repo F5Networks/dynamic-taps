@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
-#include "taps.h"
+#include "taps_internals.h"
 
 #if 0
 typedef struct {
@@ -97,8 +97,29 @@ tapsMessageGetIovec(TAPS_CTX *message, int *iovcnt)
 {
     tapsMessage *m = (tapsMessage *)message;
 
-    *iovcnt = m->iovcnt;
+    if (iovcnt) *iovcnt = m->iovcnt;
     return (m->list ? m->list : &(m->buf));
+}
+
+void
+tapsMessageTruncate(TAPS_CTX *message, size_t length)
+{
+    tapsMessage  *m = (tapsMessage *)message;
+    struct iovec *buf = (m->list) ? m->list : &(m->buf);
+    size_t        remaining = length;
+    int           row = 0;
+
+    while ((remaining > buf->iov_len) && (row < m->iovcnt)) {
+        remaining -= buf->iov_len;
+        buf++;
+        row++;
+    }
+    if (row == m->iovcnt) {
+        m->iovcnt = 0;
+        return;
+    }
+    m->iovcnt = row + 1;
+    buf->iov_len = remaining;
 }
 
 void

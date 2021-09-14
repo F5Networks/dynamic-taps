@@ -41,14 +41,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define TAPS_DEBUG
-
-#ifdef TAPS_DEBUG
-#define TAPS_TRACE() printf("Function %s: %s\n", __FILE__, __FUNCTION__);
-#else
-#define TAPS_TRACE()
-#endif
-
 /* Opaque pointer for a TAPS object. Applications must hold these to call the
    object. */
 typedef void TAPS_CTX;
@@ -77,15 +69,14 @@ typedef void (*tapsCbExpired)(void *, void *);
 /* Arg 2: the application's message context
    Arg 3: Reason string. Might be NULL */
 typedef void (*tapsCbSendError)(void *, void *, char *);
+/* Arg 2: the application's message context. This should include the TAPS
+   message object, which should be freed when done
+   Arg 3: amount of data */
+typedef void (*tapsCbReceived)(void *, void *, size_t);
 /* Arg 2: the application's message context
-   Arg 3: a TAPS context containing the message data.
-        Call tapsMessageFree when done*/
-typedef void (*tapsCbReceived)(void *, void *, TAPS_CTX *);
-/* Arg 2: the application's message context
-   Arg 3: a TAPS context containing the message data.
-        Call tapsMessageFree when done
+   Arg 3: bytes of data
    Arg 4: end of message */
-typedef void (*tapsCbReceivedPartial)(void *, void *, TAPS_CTX *, int);
+typedef void (*tapsCbReceivedPartial)(void *, void *, size_t, int);
 /* Arg 2: the application's message context
    Arg 3: Reason string. Might be NULL */
 typedef void (*tapsCbReceiveError)(void *, void *, char *);
@@ -300,6 +291,8 @@ void tapsGetProperty(int connection, char *propertyName, void *value);
 TAPS_CTX *tapsMessageNew(void *data, size_t len);
 void *tapsMessageGetFirstBuf(TAPS_CTX *message, size_t *len);
 struct iovec *tapsMessageGetIovec(TAPS_CTX *message, int *iovcnt);
+/* Shrink the iovec to length. This DOES NOT free the buffer memory */
+void tapsMessageTruncate(TAPS_CTX *message, size_t length);
 /* If the message was sent via Send or Receive, DO NOT call Free() until
  * one of the send or receive events for that message has returned */
 void tapsMessageFree(TAPS_CTX *message);
@@ -322,7 +315,7 @@ void tapsEndBatch(int connection);
  * maxLength: must be no larger than buf
  * callbacks: must populate received, receivedPartial, and receiveError.
  */
-int tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, void *buf,
+int tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, TAPS_CTX *msg,
         size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks);
 
 #if 0
