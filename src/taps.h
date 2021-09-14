@@ -45,11 +45,13 @@
    object. */
 typedef void TAPS_CTX;
 
-/*********** Function pointers for callbacks *************/
+/* Section references are for draft-ietf-taps-interface. */
+
+/*********** FUNCTION POINTERS FOR CALLBACKS *************/
 /* For all of these, arg 1 is a pointer to the app's context for the calling
    object */
 
-/* Listener callbacks */
+/* Listener callbacks (Sec 7.2) */
 /* arg 2: the TAPS connection context, used for further calls.
    arg 3: the app will return a pointer to a (tapsCallback *), with the
       closed and connectionError fields filled in. TAPS will not write or free
@@ -62,6 +64,8 @@ typedef void (*tapsCbEstablishmentError)(void *, char *);
 typedef void (*tapsCbStopped)(void *);
 
 /* Connection callbacks. */
+
+/* Sending: Section 9.2) */
 /* Arg 2: the application's message context */
 typedef void (*tapsCbSent)(void *, void *);
 /* Arg 2: the application's message context */
@@ -69,6 +73,8 @@ typedef void (*tapsCbExpired)(void *, void *);
 /* Arg 2: the application's message context
    Arg 3: Reason string. Might be NULL */
 typedef void (*tapsCbSendError)(void *, void *, char *);
+
+/* Receiving: Section 9.3 */
 /* Arg 2: the application's message context. This should include the TAPS
    message object, which should be freed when done
    Arg 3: amount of data */
@@ -80,6 +86,8 @@ typedef void (*tapsCbReceivedPartial)(void *, void *, size_t, int);
 /* Arg 2: the application's message context
    Arg 3: Reason string. Might be NULL */
 typedef void (*tapsCbReceiveError)(void *, void *, char *);
+
+/* Termination: Section 10 */
 typedef void (*tapsCbClosed)(void *);
 /* Arg 2: Reason string. Might be NULL */
 typedef void (*tapsCbConnectionError)(void *, char *);
@@ -101,34 +109,9 @@ typedef struct {
     tapsCbConnectionError    connectionError;
 } tapsCallbacks;
 
-/* Connection properties (Sec 6) */
-typedef enum { TAPS_ESTABLISHING, TAPS_ESTABLISHED, TAPS_CLOSING, TAPS_CLOSED }
-    tapsConnectionState;
+/*********** OBJECT-ORIENTED FUNCTION API *************/
 
-typedef enum { TAPS_FCFS, TAPS_RR, TAPS_RR_PKT, TAPS_PRIO, TAPS_FC, TAPS_WFQ }
-    tapsScheduler;
-
-typedef enum { TAPS_DEFAULT, TAPS_SCAVENGER, TAPS_INTERACTIVE_CAP,
-    TAPS_NON_INTERACTIVE, TAPS_CONSTANT_RATE, TAPS_CAPACITY_SEEKING }
-    tapsCapacity;
-
-#if 0
-typedef enum { TAPS_HANDOVER, TAPS_INTERACTIVE_MP, TAPS_AGGREGATE }
-    tapsMultipathPolicy;
-
-/* Returns the final length of out */
-typedef size_t (*tapsFramer)(void *in, void *out, size_t in_len);
-#endif
-
-/* Most taps functions require the caller to provide a callback */
-typedef void (*tapsHandler)(int fd, int error);
-
-/*
- * Here are the main function definitions. Section references are for
- * draft-ietf-taps-interface.
- */
-
-/* Endpoint functions. See Sec 6.1. */
+/* ENDPOINTS. See Sec 6.1. */
 /* Create a new endpoint instance */
 TAPS_CTX *tapsEndpointNew();
 /* Attachment functions. All return 1 on success, and 0 on failure with errno
@@ -149,13 +132,14 @@ int tapsWithStunServer(TAPS_CTX *endp, char *addr, uint16_t port,
 /* Clean up the instance. */
 void tapsEndpointFree(TAPS_CTX *endp);
 
-/* Transport property functions. See Sec 6.2. */
+/* TRANSPORT PROPERTIES. See Sec 6.2. */
 typedef enum { TAPS_LISTENER, TAPS_INITIATE, TAPS_RENDEZVOUS }
     tapsConnectionType;
 typedef enum  { TAPS_REQUIRE = 2, TAPS_PREFER = 1, TAPS_IGNORE = 0,
     TAPS_AVOID = -1, TAPS_PROHIBIT = -2} tapsPreference;
 typedef enum { TAPS_MP_DISABLED, TAPS_MP_ACTIVE, TAPS_MP_PASSIVE }
     tapsMultipath;
+
 typedef enum { TAPS_BIDIR, TAPS_UNIDIR_SEND, TAPS_UNIDIR_RECV } tapsDirection;
 /* Sets defaults according to connection type */
 TAPS_CTX *tapsTransportPropertiesNew(tapsConnectionType type);
@@ -189,6 +173,7 @@ int tapsTransportPropertiesSet(TAPS_CTX *tp, char *propertyName,
         tapsPreference preference);
 void tapsTransportPropertiesFree(TAPS_CTX *tp);
 
+/* PRECONNECTIONS */
 /* "local" and "remote" point to an array of endpoints */
 /*
  * Warning! Calling tapsPreconnectionNew does not freeze the contents of the
@@ -210,6 +195,7 @@ void tapsTransportPropertiesFree(TAPS_CTX *tp);
 TAPS_CTX *tapsPreconnectionNew(TAPS_CTX **localEndpoint, int numLocal,
         TAPS_CTX **remoteEndpoint, int numRemote,
         TAPS_CTX *transportProps, TAPS_CTX *securityParameters);
+#if 0
 /* Initiate a connection. This will ignore any Local Endpoints in the preconn.
    Arguments:
    ready: callback function when ready for use. the "data" argument will be
@@ -218,19 +204,15 @@ TAPS_CTX *tapsPreconnectionNew(TAPS_CTX **localEndpoint, int numLocal,
    timeout: time (in milliseconds) to wait before giving up.
    Returns: a pointer to the listener object
  */
-/* Focus on the server case, for now.
 int tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
         tapsCallback *error, tapsCallback *close, tapsCallback *abort,
         int timeout);
 */
-
-#if 0
 /* Sec 7.1  Returns an fd for the connection */
 int tapsInitiateWithSend(int preconnection, unsigned int timeoutSec,
         void *data, size_t data_len, tapsMessageContext *ctx,
         tapsCallback *ready, tapsCallback *error, tapsCallback *sent);
 #endif
-
 /* Sec 7.2 Returns an fd for the listener.
  * preconn: previously provided TAPS context for the preconnection.
  * app_ctx: an application context for the listener. If NULL, the app is just
@@ -245,6 +227,8 @@ int tapsInitiateWithSend(int preconnection, unsigned int timeoutSec,
 TAPS_CTX *tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
         struct event_base *base, tapsCallbacks *callbacks);
 void tapsPreconnectionFree(TAPS_CTX *pc);
+
+/* LISTENERS */
 /* tapsListenerStop will stop allowing new connections immediately, but it does
  * not actually return the Stopped<> event until all connections spawned by
  * that listener have closed. This allows children of a listener to share an
@@ -260,7 +244,6 @@ int tapsListenerStop(TAPS_CTX *listener, tapsCallbacks *callbacks);
    Instead, use the callback to terminate the event loop, and then call
    tapsListenerFree. */
 int tapsListenerFree(TAPS_CTX *listener);
-
 #if 0
 /* If limit == 0, it is infinite */
 void tapsListenerNewConnectionLimit(int listener, unsigned int limit);
@@ -276,17 +259,22 @@ void tapsAddRemote(int preconnection, tapsEndpoint *remote);
 int tapsClone(int connection, int *group, tapsCallback *connected,
         tapsCallback *error);
 
-/* Sec 6. Connection Properties. "value" a void pointer cast to the
+/* Sec 8. Connection Properties. "value" a void pointer cast to the
    correct type. */
+/* Connection properties (Sec 8) */
+typedef enum { TAPS_ESTABLISHING, TAPS_ESTABLISHED, TAPS_CLOSING, TAPS_CLOSED }
+    tapsConnectionState;
+
+/* Returns the final length of out */
+typedef size_t (*tapsFramer)(void *in, void *out, size_t in_len);
+
 /* See the typedefs at the end of this file to see the legitimate property
    names and typecast for value. */
 void tapsSetProperty(int connection, char *propertyName, void *value);
 void tapsGetProperty(int connection, char *propertyName, void *value);
-/* It would be good to allow the application to attach metadata, I think. */
-
-/* XXX TODO Messages and Framers (Sec 7.1) */
 #endif
-/* Messages (Sec 9.1) */
+
+/* MESSAGES (Sec 9.1) */
 /* Create a message with a single buffer */
 TAPS_CTX *tapsMessageNew(void *data, size_t len);
 void *tapsMessageGetFirstBuf(TAPS_CTX *message, size_t *len);
@@ -297,7 +285,7 @@ void tapsMessageTruncate(TAPS_CTX *message, size_t length);
  * one of the send or receive events for that message has returned */
 void tapsMessageFree(TAPS_CTX *message);
 
-
+/* CONNECTIONS */
 /* Sending (Sec 9.2) */
 int tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg, void *app_ctx,
         tapsCallbacks *callbacks);
@@ -305,19 +293,17 @@ int tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg, void *app_ctx,
 void tapsStartBatch(int connection);
 void tapsEndBatch(int connection);
 #endif
-
 /* Receiving (Sec 9.3) */
 /* Returns 0 on success, -1 on error.
  * connection: TAPS context for the connection
  * app_ctx: the context the app wants on callbacks for this receive
- * buf: memory where the bytes should go
+ * msg: a Message object where the bytes should go
  * minIncompleteLength: minimum bytes before calling back
- * maxLength: must be no larger than buf
+ * maxLength: must be no larger than the data allocated in msg
  * callbacks: must populate received, receivedPartial, and receiveError.
  */
 int tapsConnectionReceive(TAPS_CTX *connection, void *app_ctx, TAPS_CTX *msg,
         size_t minIncompleteLength, size_t maxLength, tapsCallbacks *callbacks);
-
 #if 0
 /* Termination (Sec 10) */
 void tapsClose(int connection, tapsCallback *closed, tapsCallback *error);
@@ -325,17 +311,22 @@ void tapsAbort(int connection, tapsCallback *error);
 void tapsCloseGroup(int connection);
 void tapsAbortGroup(int connection);
 #endif
-
 /* We could just free the connection on the closed event, but the application
    might want to query metadata to free its state. Also, we can't call
    dlclose() in the callback stack without segfaulting. */
 void tapsConnectionFree(TAPS_CTX *connection);
 
-
 #if 0
+/* Extra connection property stuff we might use later */
+typedef enum { TAPS_FCFS, TAPS_RR, TAPS_RR_PKT, TAPS_PRIO, TAPS_FC, TAPS_WFQ }
+    tapsScheduler;
+typedef enum { TAPS_DEFAULT, TAPS_SCAVENGER, TAPS_INTERACTIVE_CAP,
+    TAPS_NON_INTERACTIVE, TAPS_CONSTANT_RATE, TAPS_CAPACITY_SEEKING }
+    tapsCapacity;
+typedef enum { TAPS_HANDOVER, TAPS_INTERACTIVE_MP, TAPS_AGGREGATE }
+    tapsMultipathPolicy;
 /* Applications should never have to use the structures below, but they are a
    useful reference for proper use of tapsSetProperty and tapsGetProperty. */
-
 typedef struct {
     tapsConnectionState        state;
     char                      *protocol;
@@ -374,9 +365,9 @@ const tapsConnectionProperties tapsConnectionDefaults = {
     .sendOK                    = true,
     .recvOK                    = true,
     .transportProperties       = NULL,
-    .checkSumLen               = -1,
+    .checkSumLen               = -1, /* Full coverage */
     .connPrio                  = 100,
-    .connTimeout               = -1,
+    .connTimeout               = -1, /* Disabled */
     /* No universal default for keepAliveTimeout */
     .connScheduler             = TAPS_WFQ,
     .connCapacityProfile       = TAPS_DEFAULT,
