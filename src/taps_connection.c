@@ -73,7 +73,7 @@ typedef struct {
     void                   *proto_ctx; /* socket, openSSL ctx, etc. */
     void                   *app_ctx;
     struct proto_handles   *handles; /* Symbols for dynamic functions */
-    tapsCandidateState      state;
+    //tapsCandidateState      state;
     struct _send_item      *sndq; /* Pts to tail of list */
     struct _recv_item      *rcvq; /* Pts to tail of list */
     tapsCbClosed            closed;
@@ -128,7 +128,7 @@ tapsConnectionNew(void *proto_ctx, struct proto_handles *handles,
     memset(c, 0, sizeof(tapsConnection));
     c->proto_ctx = proto_ctx;
     c->handles = handles;
-    c->state = TAPS_CONNECTED;
+    //c->state = TAPS_CONNECTED;
     c->listener = listener;
     c->sendReady = TRUE;
     c->receiveReady = TRUE;
