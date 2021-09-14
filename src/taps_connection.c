@@ -177,7 +177,6 @@ _taps_sent(void *item_ctx)
     void              *app = item->app_ctx;
 
     TAPS_TRACE();
-    printf("msg %p\n", item->message);
     if (_taps_send_common(c, item) < 0) {
         printf("send failed\n");
     }
@@ -222,14 +221,12 @@ tapsConnectionSend(TAPS_CTX *connection, TAPS_CTX *msg, void *app_ctx,
     struct iovec *data;
     int iovlen;
 
-    printf("Send: setting %p\n", msg);
     ADD_ITEM(_send_item, c->sndq);
     if (!newItem) {
         errno = ENOMEM;
         printf("Sending failed\n");
         return -1;
     }
-    printf("Send: setting %p\n", msg);
     newItem->message = msg;
     newItem->connection = connection;
     newItem->app_ctx = app_ctx;
@@ -269,6 +266,7 @@ _taps_trunc_iovec(struct iovec *orig, int *iovcnt, size_t len)
     }
     memcpy(newVec, ptr, sizeof(struct iovec) * (*iovcnt));
     newVec->iov_base += remaining;
+    newVec->iov_len -= remaining;
     return newVec;
 }
 
@@ -310,7 +308,7 @@ _taps_received(void *item_ctx, struct iovec *data, size_t data_len)
         return;
     }
     DELETE_ITEM(item, &(c->rcvq));
-    (fn)(conn_ctx, item_app);
+    (fn)(conn_ctx, item_app, item->currLength);
 }
 
 static void
@@ -359,7 +357,7 @@ _taps_received_partial(void *item_ctx, struct iovec *data, size_t data_len)
     app_ctx = item->app_ctx;
     msg = item->message;
     DELETE_ITEM(item, &(c->rcvq));
-    (rcvPart)(c->app_ctx, app_ctx, FALSE);
+    (rcvPart)(c->app_ctx, app_ctx, item->currLength, FALSE);
 }
 
 int

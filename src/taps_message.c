@@ -102,6 +102,27 @@ tapsMessageGetIovec(TAPS_CTX *message, int *iovcnt)
 }
 
 void
+tapsMessageTruncate(TAPS_CTX *message, size_t length)
+{
+    tapsMessage  *m = (tapsMessage *)message;
+    struct iovec *buf = (m->list) ? m->list : &(m->buf);
+    size_t        remaining = length;
+    int           row = 0;
+
+    while ((remaining > buf->iov_len) && (row < m->iovcnt)) {
+        remaining -= buf->iov_len;
+        buf++;
+        row++;
+    }
+    if (row == m->iovcnt) {
+        m->iovcnt = 0;
+        return;
+    }
+    m->iovcnt = row + 1;
+    buf->iov_len = remaining;
+}
+
+void
 tapsMessageFree(TAPS_CTX *message)
 {
     tapsMessage *m = (tapsMessage *)message;

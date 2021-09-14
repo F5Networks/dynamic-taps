@@ -34,6 +34,7 @@
 #include "../src/taps.h"
 #include "../src/taps_debug.h"
 
+#define MIN_BUF  0
 #define BUF_SIZE 1024
 #define PRINT_RESULT(text, reason)    \
     if (reason) printf(text ": %s\n", reason); else printf(text "\n");
@@ -93,18 +94,18 @@ _app_sent(void *conn, void *msg)
     free(m);
 }
 
-void _app_received_partial(void *conn, void *msg, int eom);
+void _app_received_partial(void *conn, void *msg, size_t bytes, int eom);
 
 static void
-_app_received(void *conn, void *msg)
+_app_received(void *conn, void *msg, size_t bytes)
 {
-    _app_received_partial(conn, msg, 1);
+    _app_received_partial(conn, msg, bytes, 1);
     /* XXX The only difference here is we've gotten FIN from the peer; so
        maybe we should call tapsConnectionClose()? */
 }
 
 void
-_app_received_partial(void *conn, void *msg, int eom)
+_app_received_partial(void *conn, void *msg, size_t bytes, int eom)
 {
     struct app_conn *c = conn;
     struct app_msg  *m = msg;
@@ -113,7 +114,8 @@ _app_received_partial(void *conn, void *msg, int eom)
 
     TAPS_TRACE();
     text = tapsMessageGetFirstBuf(m->taps, &len);
-    printf("Received %s\n", (char *)text);
+    printf("Received:\n%.*s", (int)bytes, (char *)text);
+    tapsMessageTruncate(m->taps, bytes);
     if (tapsConnectionSend(c->taps, m->taps, m, &c->l->callbacks) < 0) {
         printf("Send failed\n");
         tapsMessageFree(m->taps);
@@ -127,7 +129,7 @@ _app_received_partial(void *conn, void *msg, int eom)
     }
     m->taps = tapsMessageNew(m->buf, BUF_SIZE);
     if (m->taps) {
-        tapsConnectionReceive(c->taps, m, m->taps, 0, BUF_SIZE,
+        tapsConnectionReceive(c->taps, m, m->taps, MIN_BUF, BUF_SIZE,
                 &c->l->callbacks);
     } else {
         printf("out of memory, not receiving anymore\n");
@@ -186,7 +188,7 @@ _app_connection_received(void *listener, TAPS_CTX *conn, void **cb)
     }
     m->taps = tapsMessageNew(m->buf, BUF_SIZE);
     if (m->taps) {
-        tapsConnectionReceive(c->taps, m, m->taps, 0, BUF_SIZE,
+        tapsConnectionReceive(c->taps, m, m->taps, MIN_BUF, BUF_SIZE,
                 &c->l->callbacks);
     } else {
         printf("out of memory not receiving\n");
