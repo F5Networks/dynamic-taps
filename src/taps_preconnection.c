@@ -107,9 +107,9 @@ freeProtocol(tapsProtocol *proto)
 #endif
 
 typedef struct {
-    tapsEndpoint  *local[TAPS_MAX_ENDPOINTS];
+    TAPS_CTX      *local[TAPS_MAX_ENDPOINTS];
     int            numLocal;
-    tapsEndpoint  *remote[TAPS_MAX_ENDPOINTS];
+    TAPS_CTX      *remote[TAPS_MAX_ENDPOINTS];
     int            numRemote;
     /* XXX what would be the effect of the application messing with the
        libpath here? Security problem? */
@@ -320,30 +320,28 @@ tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
         printf("Base = NULL not yet supported\n"); /* XXX */
         return NULL;
     }
-    for (i = 0; i < pc->numLocal; i++) {
-        if (!pc->local[0]->has_port) {
-            errno = EINVAL;
-            return NULL;
-        }
-        if (!pc->local[0]->has_ipv4 && !pc->local[0]->has_ipv6) {
-            /* XXX Resolve it, check for IPv6 */
-            errno = EINVAL;
-            return NULL;
-        }
-    }
     /* XXX Pick the best protocol, not just the first */
     /* XXX Check all the local endpoints */
+    sin6.sin6_family = AF_INET6;
     /* Just do ipv6 if present, else ipv4, for now */
-    if (pc->local[0]->has_ipv6) {
-        sin6.sin6_family = AF_INET6;
-        memcpy(&sin6.sin6_addr, &pc->local[0]->ipv6, sizeof(struct in6_addr));
-        sin6.sin6_port = htons(pc->local[0]->port);
-        addr = (struct sockaddr *)&sin6;
-    } else {
+    addr = (struct sockaddr *)&sin6;
+    if (tapsEndpointGetAddress(pc->local[0], addr) < 0) {
         sin.sin_family = AF_INET;
-        sin.sin_addr.s_addr = pc->local[0]->ipv4.s_addr;
-        sin.sin_port = htons(pc->local[0]->port);
         addr = (struct sockaddr *)&sin;
+        if (tapsEndpointGetAddress(pc->local[0], addr) < 0) {
+            errno = EINVAL;
+            return NULL;
+        } else {
+            if (sin.sin_port == 0) {
+                errno = EINVAL;
+                return NULL;
+            }
+        }
+    } else {
+        if (sin6.sin6_port == 0) {
+            errno = EINVAL;
+            return NULL;
+        }
     }
     l = tapsListenerNew(app_ctx, pc->protocol[0].libpath, addr, base,
             callbacks);

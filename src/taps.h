@@ -129,6 +129,12 @@ int tapsAddAlias(TAPS_CTX *endp1, TAPS_CTX *endp2);
 /* XXX No support for doing anything with this */
 int tapsWithStunServer(TAPS_CTX *endp, char *addr, uint16_t port,
         void *credentials, size_t credentials_len);
+/* Valid values: "ipv4", "ipv6", "hostname", "service", "protocol", "interface".
+ * Returns NULL if not present, or incorrect input. *buf is where the string
+ * will be copied. */
+const char *tapsEndpointGetProperty(TAPS_CTX *endp, char *name, char *buf);
+/* Returns -1 on failure */
+int tapsEndpointGetAddress(TAPS_CTX *endp, struct sockaddr *addr);
 /* Clean up the instance. */
 void tapsEndpointFree(TAPS_CTX *endp);
 

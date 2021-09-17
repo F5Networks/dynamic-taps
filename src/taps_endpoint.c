@@ -27,6 +27,29 @@
 #include <string.h>
 #include "taps_internals.h"
 
+/* Define an endpoint (Sec 4.1) */
+typedef struct _taps_endpoint {
+    unsigned char           has_port : 1;
+    unsigned char           has_ipv4 : 1;
+    unsigned char           has_ipv6 : 1;
+    unsigned char           has_hostname : 1;
+    unsigned char           has_service : 1;
+    unsigned char           has_protocol : 1;
+    unsigned char           has_interface : 1;
+    unsigned char           has_stun : 1;
+    struct in_addr          ipv4;
+    struct in6_addr         ipv6;
+    uint16_t                port;
+    struct sockaddr_in6     stun; /* in6 is bigger than in4; could be either */
+    void                   *stun_credentials;
+    char                   *hostname;
+    char                   *service;
+    char                   *protocol;
+    char                   *interface;
+    struct _taps_endpoint  *prevAlias;
+    struct _taps_endpoint  *nextAlias;
+} tapsEndpoint;
+
 TAPS_CTX *
 tapsEndpointNew()
 {
@@ -194,6 +217,72 @@ tapsWithStunServer(TAPS_CTX *endp, char *addr, uint16_t port,
         memcpy(ep->stun_credentials, credentials, credentials_len);
     }
     return 1;
+}
+
+const char *
+tapsEndpointGetProperty(TAPS_CTX *endp, char *name, char *buf)
+{
+    tapsEndpoint *ep = endp;
+
+    if (strcmp(name, "ipv4") == 0) {
+        return (ep->has_ipv4 ? inet_ntop(AF_INET, &ep->ipv4, buf, 128) : NULL);
+    } 
+    if (strcmp(name, "ipv6") == 0) {
+        return (ep->has_ipv6 ? inet_ntop(AF_INET6, &ep->ipv6, buf, 128) :
+                NULL);
+    }
+    if (strcmp(name, "hostname") == 0) {
+        if (!ep->has_hostname) return NULL;
+        memcpy(buf, ep->hostname, strlen(ep->hostname) + 1);
+        return buf;
+    }
+    if (strcmp(name, "service") == 0) {
+        if (!ep->has_service) return NULL;
+        memcpy(buf, ep->service, strlen(ep->service) + 1);
+        return buf;
+    }
+    if (strcmp(name, "protocol") == 0) {
+        if (!ep->has_protocol) return NULL;
+        memcpy(buf, ep->protocol, strlen(ep->protocol) + 1);
+        return buf;
+    }
+    if (strcmp(name, "interface") == 0) {
+        if (!ep->has_service) return NULL;
+        memcpy(buf, ep->interface, strlen(ep->interface) + 1);
+        return buf;
+    }
+    printf("Property not supported\n");
+    return NULL;
+}
+
+int
+tapsEndpointGetAddress(TAPS_CTX *endp, struct sockaddr *saddr)
+{
+    tapsEndpoint        *ep = endp;
+    struct sockaddr_in  *sin = (struct sockaddr_in *)saddr;
+    struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)saddr;
+
+    sin->sin_port = (ep->has_port ? ep->port : 0);
+    switch(sin->sin_family) {
+    case AF_INET:
+        if (ep->has_ipv4) {
+            memcpy(&sin->sin_addr, &ep->ipv4, sizeof(struct in_addr));
+        } else {
+            return -1;
+        }
+        break;
+    case AF_INET6:
+        if (ep->has_ipv6) {
+            memcpy(&sin6->sin6_addr, &ep->ipv6, sizeof(struct in6_addr));
+        } else {
+            return -1;
+        }
+        break;
+    default:
+        errno = EINVAL;
+        return -1;
+    }
+    return 0;
 }
 
 void

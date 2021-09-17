@@ -27,9 +27,9 @@
 
 /* XXX Just copy this until we have query functions */
 typedef struct {
-    tapsEndpoint  *local[TAPS_MAX_ENDPOINTS];
+    TAPS_CTX      *local[TAPS_MAX_ENDPOINTS];
     int            numLocal;
-    tapsEndpoint  *remote[TAPS_MAX_ENDPOINTS];
+    TAPS_CTX      *remote[TAPS_MAX_ENDPOINTS];
     int            numRemote;
     /* XXX what would be the effect of the application messing with the
        libpath here? Security problem? */
@@ -45,7 +45,7 @@ int tapsUpdateProtocols(tapsProtocol *next, int slotsRemaining);
 int preconnectionTest()
 {
     int result = 0;
-    tapsEndpoint *local = (tapsEndpoint *)tapsEndpointNew();
+    TAPS_CTX *local = tapsEndpointNew();
     transportProperties *tp = (transportProperties *)
             tapsTransportPropertiesNew(TAPS_LISTENER);
     tapsPreconnection *pc;
