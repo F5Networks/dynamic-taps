@@ -100,29 +100,6 @@ struct name {                       \
 
 /* End of LIST macros */
 
-/* Define an endpoint (Sec 4.1) */
-typedef struct _taps_endpoint {
-    unsigned char           has_port : 1;
-    unsigned char           has_ipv4 : 1;
-    unsigned char           has_ipv6 : 1;
-    unsigned char           has_hostname : 1;
-    unsigned char           has_service : 1;
-    unsigned char           has_protocol : 1;
-    unsigned char           has_interface : 1;
-    unsigned char           has_stun : 1;
-    struct in_addr          ipv4;
-    struct in6_addr         ipv6;
-    uint16_t                port;
-    struct sockaddr_in6     stun; /* in6 is bigger than in4; could be either */
-    void                   *stun_credentials;
-    char                   *hostname;
-    char                   *service;
-    char                   *protocol;
-    char                   *interface;
-    struct _taps_endpoint  *prevAlias;
-    struct _taps_endpoint  *nextAlias;
-} tapsEndpoint;
-
 typedef struct _if_list {
     struct ifaddrs ifa;;
     LIST_ENTRY(struct _if_list);
@@ -182,7 +159,6 @@ typedef struct {
     char                *protocol;
     char                *libpath;
     transportAbilities   properties;
-
 } tapsProtocol;
 
 #if 0
