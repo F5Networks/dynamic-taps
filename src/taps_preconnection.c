@@ -332,12 +332,14 @@ tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
             errno = EINVAL;
             return NULL;
         } else {
+	    sin.sin_port = htons(sin.sin_port);
             if (sin.sin_port == 0) {
                 errno = EINVAL;
                 return NULL;
             }
         }
     } else {
+        sin6.sin6_port = htons(sin6.sin6_port);
         if (sin6.sin6_port == 0) {
             errno = EINVAL;
             return NULL;
