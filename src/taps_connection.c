@@ -76,6 +76,8 @@ typedef struct {
     //tapsCandidateState      state;
     struct _send_item      *sndq; /* Pts to tail of list */
     struct _recv_item      *rcvq; /* Pts to tail of list */
+    tapsCbReady             ready;
+    tapsCbEstablishmentError establishmentError;
     tapsCbClosed            closed;
     tapsCbConnectionError   connectionError;
     /* Only send one send or receive command to protocol at a time */
@@ -85,6 +87,32 @@ typedef struct {
     //struct sockaddr      *remote;
     TAPS_CTX               *listener; /* NULL for Initiated connections */
 } tapsConnection;
+
+void _taps_sent(void *item_ctx);
+void _taps_expired(void *item_ctx);
+void _taps_send_error(void *item_ctx, char *reason);
+
+void
+_taps_ready(void *taps_ctx)
+{
+    tapsConnection *c = taps_ctx;
+
+    TAPS_TRACE();
+    if (c->ready) (c->ready)(c->app_ctx);
+}
+
+void
+_taps_establishment_error(void *taps_ctx, char *reason)
+{
+    tapsConnection *c = taps_ctx;
+
+    TAPS_TRACE();
+    /* never a listener, always an initiate call. We own the handles */
+    dlclose(c->handles.proto);
+    free(c->handles);
+    c->handles = NULL;
+    if (c->establishmentError) (c->establishmentError)(c->app_ctx, reason);
+}
 
 void
 _taps_closed(void *taps_ctx)
@@ -96,14 +124,16 @@ _taps_closed(void *taps_ctx)
         tapsListenerDeref(c->listener);
         c->listener = NULL;
     } else {
+        dlclose(c->handles.proto);
         free(c->handles);
+        c->handles = NULL;
     }
     c->proto_ctx = NULL;
     if (c->closed) (c->closed)(c->app_ctx);
 }
 
 void
-_taps_connection_error(void *taps_ctx)
+_taps_connection_error(void *taps_ctx, char *reason)
 {
     tapsConnection *c = taps_ctx;
 
@@ -112,11 +142,44 @@ _taps_connection_error(void *taps_ctx)
         tapsListenerDeref(c->listener);
         c->listener = NULL;
     } else {
+        dlclose(c->handles.proto);
         free(c->handles);
+        c->handles = NULL;
     }
-    (c->connectionError)(c->app_ctx, NULL);
+    (c->connectionError)(c->app_ctx, reason);
 }
 
+/* Initiate Workflow */
+TAPS_CTX *
+tapsConnectionNew(void *app_ctx, struct proto_handles *handles,
+        tapsEndpoint *remote, tapsCallbacks *callbacks,
+        struct event_base *base, int timeout)
+{
+    tapsConnection *c = malloc(sizeof(tapsConnection));
+
+    TAPS_TRACE();
+    if (!c) return c;
+    memset(c, 0, sizeof(tapsConnection));
+    c->handles = handles;
+    c->app_ctx = app_ctx;
+    c->ready = callbacks->ready;
+    c->establishmentError = callbacks->establishmentError;
+    c->closed = callbacks->closed;
+    c->connectionError = callbacks->connectionError;
+
+    c->proto_ctx = (handles->connect)(c, base, addr, _taps_ready,
+            _taps_establishment_error, _taps_closed, _taps_connection_error);
+    if !(c->proto_ctx) {
+        tapsConnectionFree(c);
+        return NULL;
+    }
+    //c->state = TAPS_CONNECTED;
+    //c->sendReady = TRUE;
+    //c->receiveReady = TRUE;
+    return c;
+}
+
+/* Listener Workflow */
 TAPS_CTX *
 tapsConnectionNew(void *proto_ctx, struct proto_handles *handles,
         TAPS_CTX *listener)
@@ -146,10 +209,6 @@ tapsConnectionInitialize(TAPS_CTX *conn, void *app_ctx,
     c->closed = callbacks->closed;
     c->connectionError = callbacks->connectionError;
 }
-
-void _taps_sent(void *item_ctx);
-void _taps_expired(void *item_ctx);
-void _taps_send_error(void *item_ctx, char *reason);
 
 static int
 _taps_send_common(tapsConnection *c, struct _send_item *item)
@@ -411,7 +470,11 @@ tapsConnectionFree(TAPS_CTX *connection)
                 "Connection died");
         DELETE_ITEM(c->rcvq, &(c->rcvq));
     }
-
+    if ((!c->listener) && c->handles) {
+        /* For clients, these objects belong to the connection */
+        dlclose(c->handles.proto);
+        free(c->handles);
+    }
     /* If no listener, we should free the protocol handle */
     free(connection);
 }

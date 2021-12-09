@@ -211,6 +211,7 @@ struct proto_handles {
     void             *proto;
     listenHandle      listen;
     stopHandle        stop;
+    connectHandle     connect;
     sendHandle        send;
     receiveHandle     receive;
 };

@@ -78,8 +78,9 @@ _taps_stopped(void *taps_ctx)
 }
 
 TAPS_CTX *
-tapsListenerNew(void *app_ctx, char *libpath, struct sockaddr *addr,
-        struct event_base *base, tapsCallbacks *callbacks)
+tapsListenerNew(void *app_ctx, struct proto_handles *handles,
+        struct sockaddr *addr, struct event_base *base,
+        tapsCallbacks *callbacks)
 {
     tapsListener      *l;
 
@@ -90,33 +91,7 @@ tapsListenerNew(void *app_ctx, char *libpath, struct sockaddr *addr,
         return l;
     }
     memset(l, 0, sizeof(tapsListener));
-    l->handles.proto = dlopen(libpath, RTLD_LAZY);
-    if (!l->handles.proto) {
-        printf("Couldn't get protocol handle: %s\n", dlerror());
-        goto fail;
-    }
-    l->handles.listen = dlsym(l->handles.proto, "Listen");
-    if (!l->handles.listen) {
-        printf("Couldn't get Listen handle: %s\n", dlerror());
-        goto fail;
-    }
-    /* Fail fast if the protocol does not have all the required handles.
-       This vetting could occur in tapsd? The preconnection? */
-    l->handles.stop = dlsym(l->handles.proto, "Stop");
-    if (!l->handles.stop) {
-        printf("Couldn't get Stop handle: %s\n", dlerror());
-        goto fail;
-    }
-    l->handles.send = dlsym(l->handles.proto, "Send");
-    if (!l->handles.send) {
-        printf("Couldn't get Send handle: %s\n", dlerror());
-        goto fail;
-    }
-    l->handles.receive = dlsym(l->handles.proto, "Receive");
-    if (!l->handles.receive) {
-        printf("Couldn't get Receive handle: %s\n", dlerror());
-        goto fail;
-    }
+    memcpy(&l->handles, handles, sizeof(struct proto_handles));
     l->baseCreatedHere = (base == NULL);
     l->base = l->baseCreatedHere ? event_base_new() : base;
     if (!l->base) {

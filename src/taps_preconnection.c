@@ -210,15 +210,69 @@ struct _node {
     LIST_ENTRY(struct _node);
 };
 
-#if 0
-/* XXX this code is out of date */
-int
-tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
-        tapsCallback *error, int timeout)
+struct proto_handles *
+tapsFetchHandles(char *libpath, bool listener)
 {
-    int                result = 0;
+    struct proto_handles *handles = malloc(sizeof(struct proto_handles));
+    if (!handles) {
+        goto fail;
+    }
+        
+    handles->proto = dlopen(libpath, RTLD_LAZY);
+    if (!handles->proto) {
+        printf("Couldn't get protocol handle: %s\n", dlerror());
+        goto fail;
+    }
+    if (listener) {
+        handles->listen = dlsym(handles->proto, "Listen");
+        if (!handles->listen) {
+            printf("Couldn't get Listen handle: %s\n", dlerror());
+            goto fail;
+        }
+        /* Fail fast if the protocol does not have all the required handles.
+           This vetting could occur in tapsd? The preconnection? */
+        handles->stop = dlsym(handles->proto, "Stop");
+        if (!handles->stop) {
+            printf("Couldn't get Stop handle: %s\n", dlerror());
+            goto fail;
+        }
+    } else {
+        handles->connect = dlsym(handles->proto, "Connect");
+        if (!handles->connect) {
+            printf("Couldn't get Connect handle: %s\n", dlerror());
+            goto fail;
+        }
+    }
+    handles->send = dlsym(handles->proto, "Send");
+    if (!handles->send) {
+        printf("Couldn't get Send handle: %s\n", dlerror());
+        goto fail;
+    }
+    handles->receive = dlsym(handles->proto, "Receive");
+    if (!handles->receive) {
+        printf("Couldn't get Receive handle: %s\n", dlerror());
+        goto fail;
+    }
+
+    return handles;
+fail:
+    if (handles) {
+        if (handles->proto) dlclose(handles->proto);
+        free(handles);
+    }
+    return NULL;
+}
+
+TAPS_CTX *
+tapsPreconnectionInitiate(TAPS_CTX *preconn, void *app_ctx,
+        struct event_base *base, tapsCallbacks *callbacks, int timeout)
+{
+    TAPS_CTX             *conn = NULL;
+    tapsPreconnection    *pc = (tapsPreconnection *)preconn;
+    void                 *proto_ctx;
+    struct proto_handles *handles = NULL;
+#if 0
     int                i;
-    tapsPreconnection *pc = (tapsPreconnection *)preconn;
     tapsEndpoint      *ep;
     tapsPreference     pref;
     struct ifaddrs    *ifa;
@@ -226,6 +280,7 @@ tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
     LIST_HEAD(, struct _node) protos;
     LIST_HEAD(, struct _node) endpoints;
     struct _node      *node, *__node;
+#endif
 
     TAPS_TRACE();
     if (pc->numRemote < 1) {
@@ -233,6 +288,28 @@ tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
         goto fail;
     }
 
+    /* Just take the first protocol for now */
+    handles = tapsFetchHandles(pc->protocol[0].libpath, true);
+    if (!handles) {
+        return NULL;
+    }
+    conn = tapsConnectionNew(app_ctx, handles, pc->remote[0]);
+    if (!conn) {
+        printf("couldn't get socket\n");
+        goto fail;
+    }
+    return conn;
+fail:
+    if (conn) {
+        tapsConnectionFree(conn);
+    }
+    if (handles) {
+        free(handles);
+    }
+    return NULL;
+}
+
+#if 0
     /* Build a candidate tree */
     /* First, ranked lists of each level */
     for (ifa = pc->transport->interfaces; ifa; ifa = ifa->ifa_next) {
@@ -307,6 +384,7 @@ tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
     struct sockaddr_in  sin;
     struct sockaddr_in6 sin6;
     struct sockaddr    *addr;
+    struct proto_handles *handles;
 
     TAPS_TRACE();
     if (!pc || (pc->numLocal < 1) || !callbacks ||
@@ -345,8 +423,13 @@ tapsPreconnectionListen(TAPS_CTX *preconn, void *app_ctx,
             return NULL;
         }
     }
-    l = tapsListenerNew(app_ctx, pc->protocol[0].libpath, addr, base,
-            callbacks);
+
+    handles = tapsFetchHandles(pc->protocol[0].libpath, true);
+    if (!handles) {
+        return NULL;
+    }
+    l = tapsListenerNew(app_ctx, handles, addr, base, callbacks);
+    free(handles);
     return l;
 }
 

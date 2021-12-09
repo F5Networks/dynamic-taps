@@ -64,6 +64,8 @@ typedef void (*tapsCbEstablishmentError)(void *, char *);
 typedef void (*tapsCbStopped)(void *);
 
 /* Connection callbacks. */
+/* Section 7.1: Initiate */
+typedef void (*tapsCbReady)(void *);
 
 /* Sending: Section 9.2) */
 /* Arg 2: the application's message context */
@@ -99,6 +101,7 @@ typedef struct {
     tapsCbConnectionReceived connectionReceived;
     tapsCbEstablishmentError establishmentError;
     tapsCbStopped            stopped;
+    tapsCbReady              ready;
     tapsCbSent               sent;
     tapsCbExpired            expired;
     tapsCbSendError          sendError;
@@ -201,19 +204,20 @@ void tapsTransportPropertiesFree(TAPS_CTX *tp);
 TAPS_CTX *tapsPreconnectionNew(TAPS_CTX **localEndpoint, int numLocal,
         TAPS_CTX **remoteEndpoint, int numRemote,
         TAPS_CTX *transportProps, TAPS_CTX *securityParameters);
-#if 0
 /* Initiate a connection. This will ignore any Local Endpoints in the preconn.
    Arguments:
-   ready: callback function when ready for use. the "data" argument will be
-          a pointer to the connection context (of type TAPS_CTX).
-   error: callback if somehting goes wrong.
-   timeout: time (in milliseconds) to wait before giving up.
-   Returns: a pointer to the listener object
+ * app_ctx: the application context the connection object should reference
+ * base: the libevent base. If NULL, TAPS will do its own event framework, which
+   reduces application complexity but also performance. NULL is not yet
+   implemented.
+ * callbacks: Ready and EstablishmentError are used here
+ * timeout: time (in milliseconds) to wait before giving up.
+   Returns: a pointer to the connection object (0 = no timeout)
  */
-int tapsPreconnectionInitiate(TAPS_CTX *preconn, tapsCallback *ready,
-        tapsCallback *error, tapsCallback *close, tapsCallback *abort,
-        int timeout);
-*/
+TAPS_CTX *tapsPreconnectionInitiate(TAPS_CTX *preconn, void *app_ctx,
+        struct event_base *base, tapsCallbacks *callbacks, int timeout);
+
+#if 0
 /* Sec 7.1  Returns an fd for the connection */
 int tapsInitiateWithSend(int preconnection, unsigned int timeoutSec,
         void *data, size_t data_len, tapsMessageContext *ctx,

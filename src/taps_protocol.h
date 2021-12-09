@@ -35,6 +35,7 @@ typedef void *(*ConnectionReceivedCb)(void *, void *);
 typedef void (*EstablishmentErrorCb)(void *, char *);
 typedef void (*StoppedCb)(void *);
 /* Connection Context */
+typedef void (*ReadyCb)(void *);
 typedef void (*SentCb)(void *);
 typedef void (*ExpiredCb)(void *);
 typedef void (*SendErrorCb)(void *, char *);
@@ -66,6 +67,9 @@ typedef void *(*listenHandle)(void *, struct event_base *, struct sockaddr *,
         ConnectionErrorCb);
 /* Must be a function "Stop" */
 typedef void (*stopHandle)(void *, StoppedCb);
+/* Must be named "Connect" */
+typedef void (*connectHandle)(void *, struct event_base *, struct sockaddr *,
+        ReadyCb, EstablishmentErrorCb, ClosedCb, ConnectionErrorCb, int);
 /* Must be named "Send" */
 /* args: proto context, taps context, data, iovcnt; then callbacks */
 typedef int (*sendHandle)(void *, void *, struct iovec *, int, SentCb,
