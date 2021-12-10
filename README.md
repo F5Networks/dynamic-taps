@@ -43,7 +43,7 @@ See documents in the docs/ folder.
 
 Contributions are welcome. However, F5 corporate policy requires contributors
 to complete the Contributor License Agreement in this directory and email it to
-m.duke@f5.com.
+j.moses@f5.com.
 
 ## References
 The interface between applications and TAPS is specified in documents available
